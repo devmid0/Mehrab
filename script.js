@@ -7,7 +7,6 @@
 // ==========================================
 
 const QURAN_API_BASE = 'https://api.alquran.cloud/v1';
-const AUDIO_BASE = 'https://cdn.islamic.network/quran/audio-surah/128/ar.alafasy';
 const ADHAN_API_BASE = 'https://api.aladhan.com/v1';
 
 // ==========================================
@@ -19,7 +18,6 @@ let appState = {
     surahs: [],
     selectedSurah: null,
     currentSurahData: null,
-    isPlaying: false,
     
     // Prayer - Location & Times
     location: null,
@@ -193,20 +191,6 @@ function setupQuranEventListeners() {
             loadSurah(appState.selectedSurah);
         }
     });
-    
-    // Play/Pause button (optional - may not exist in all versions)
-    safeAddEventListener('playPauseBtn', 'click', toggleAudio);
-    
-    // Audio events (optional elements)
-    const audio = safeGetElement('quranAudio');
-    if (audio) {
-        audio.addEventListener('timeupdate', updateAudioProgress);
-        audio.addEventListener('loadedmetadata', updateAudioDuration);
-        audio.addEventListener('ended', () => {
-            appState.isPlaying = false;
-            updatePlayPauseButton();
-        });
-    }
 }
 
 function filterSurahs(query) {
@@ -285,84 +269,14 @@ function displayAyahs(ayahs, surahNumber) {
     ayahs.forEach((ayah, index) => {
         const card = document.createElement('div');
         card.className = 'ayah-card';
-        card.dataset.number = ayah.numberInSurah;
         
         card.innerHTML = `
             <div class="ayah-number">${ayah.numberInSurah}</div>
             <div class="ayah-text">${ayah.text}</div>
-            <div class="ayah-actions">
-                <button class="ayah-action-btn play-ayah" data-surah="${surahNumber}" data-ayah="${ayah.numberInSurah}" title="استماع">
-            </div>
         `;
         
         container.appendChild(card);
     });
-    
-    // Add click handlers for play buttons
-    container.querySelectorAll('.play-ayah').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const ayahNum = this.dataset.ayah;
-            playAyahAudio(surahNumber, ayahNum);
-        });
-    });
-}
-
-async function playAyahAudio(surahNumber, ayahNumber) {
-    // For now, play the full surah audio
-    // In production, you'd use verse-by-verse audio
-    const audio = safeGetElement('quranAudio');
-    if (audio) {
-        audio.src = `${AUDIO_BASE}/${surahNumber}.mp3`;
-        audio.play();
-        appState.isPlaying = true;
-        updatePlayPauseButton();
-    }
-}
-
-function toggleAudio() {
-    const audio = safeGetElement('quranAudio');
-    
-    if (audio) {
-        if (appState.isPlaying) {
-            audio.pause();
-        } else {
-            audio.play();
-        }
-        
-        appState.isPlaying = !appState.isPlaying;
-        updatePlayPauseButton();
-    }
-}
-
-function updatePlayPauseButton() {
-    const btn = safeGetElement('playPauseBtn');
-    if (btn) {
-        const icon = btn.querySelector('i');
-        if (icon) {
-            icon.className = appState.isPlaying ? 'fas fa-pause' : 'fas fa-play';
-        }
-    }
-}
-
-function updateAudioProgress() {
-    const audio = safeGetElement('quranAudio');
-    const progress = safeGetElement('audioProgress');
-    
-    if (audio && progress && audio.duration) {
-        const percent = (audio.currentTime / audio.duration) * 100;
-        progress.style.width = `${percent}%`;
-    }
-}
-
-function updateAudioDuration() {
-    const audio = safeGetElement('quranAudio');
-    const duration = safeGetElement('audioDuration');
-    
-    if (audio && duration && audio.duration) {
-        const minutes = Math.floor(audio.duration / 60);
-        const seconds = Math.floor(audio.duration % 60);
-        duration.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-    }
 }
 
 function hideAllStates() {
@@ -377,7 +291,6 @@ function showError(message) {
     safeSetText('errorMessage', message);
     safeSetDisplay('errorState', 'block');
     safeSetDisplay('surahInfoCard', 'none');
-    safeSetDisplay('quranAudioPlayer', 'none');
 }
 
 // ==========================================
@@ -1204,42 +1117,6 @@ style.textContent = `
     .surah-search:focus {
         outline: none;
         border-color: var(--gold);
-    }
-    /* Audio player */
-    .quran-audio-player {
-        display: flex;
-        align-items: center;
-        gap: 15px;
-        padding: 15px;
-        background: rgba(255,255,255,0.05);
-        border-radius: 12px;
-        margin-top: 20px;
-    }
-    .audio-btn {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background: var(--gold);
-        border: none;
-        color: #1a1a2e;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    .audio-progress {
-        flex: 1;
-    }
-    .progress-track {
-        height: 4px;
-        background: rgba(255,255,255,0.2);
-        border-radius: 2px;
-    }
-    .progress-fill {
-        height: 100%;
-        background: var(--gold);
-        width: 0%;
-        transition: width 0.2s;
     }
 `;
 document.head.appendChild(style);

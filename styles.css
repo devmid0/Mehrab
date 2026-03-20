@@ -786,46 +786,6 @@ body {
     color: var(--text-muted);
 }
 
-.audio-player {
-    background: var(--glass);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-xl);
-    padding: var(--space-lg);
-    margin-top: var(--space-xl);
-    display: flex;
-    align-items: center;
-    gap: var(--space-lg);
-    backdrop-filter: blur(20px);
-}
-
-.audio-info {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-xs);
-    min-width: 200px;
-}
-
-#audioSurah {
-    font-family: var(--font-display);
-    font-size: 1.2rem;
-    font-weight: 700;
-}
-
-#audioReciter {
-    font-size: 0.9rem;
-    color: var(--text-muted);
-}
-
-.audio-player audio {
-    flex: 1;
-    height: 40px;
-    border-radius: var(--radius-md);
-}
-
-.audio-player audio::-webkit-media-controls-panel {
-    background: var(--surface);
-}
-
 /* ==========================================
    TASBIH STYLES
    ========================================== */
@@ -1757,97 +1717,6 @@ body {
     50% { opacity: 0.7; }
 }
 
-/* Quran Audio Player */
-.quran-audio-player {
-    background: var(--glass);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-xl);
-    padding: var(--space-lg);
-    margin-bottom: var(--space-xl);
-    backdrop-filter: blur(20px);
-}
-
-.audio-controls {
-    display: flex;
-    align-items: center;
-    gap: var(--space-lg);
-    flex-wrap: wrap;
-}
-
-.audio-btn {
-    width: 60px;
-    height: 60px;
-    background: var(--gold);
-    border: none;
-    border-radius: var(--radius-full);
-    color: var(--text-on-gold);
-    font-size: 1.5rem;
-    cursor: pointer;
-    transition: all var(--transition-base);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.audio-btn:hover {
-    background: var(--accent-light);
-    transform: scale(1.1);
-    box-shadow: var(--shadow-glow);
-}
-
-.audio-btn:active {
-    transform: scale(0.95);
-}
-
-.audio-progress {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-    min-width: 200px;
-}
-
-.audio-progress span {
-    font-size: 0.9rem;
-    color: var(--text-muted);
-    white-space: nowrap;
-}
-
-.progress-track {
-    flex: 1;
-    height: 6px;
-    background: var(--surface);
-    border-radius: 3px;
-    overflow: hidden;
-    cursor: pointer;
-}
-
-.progress-fill {
-    height: 100%;
-    background: var(--gold);
-    border-radius: 3px;
-    width: 0%;
-    transition: width 0.1s linear;
-}
-
-.reciter-info {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-xs);
-}
-
-.reciter-info span {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-}
-
-.reciter-info strong {
-    font-family: var(--font-display);
-    color: var(--accent);
-}
-
 /* Loading State */
 .loading-state {
     text-align: center;
@@ -1945,42 +1814,6 @@ body {
     text-align: justify;
     color: var(--text-light);
     direction: rtl;
-}
-
-.ayah-actions {
-    display: flex;
-    gap: var(--space-sm);
-    opacity: 0;
-    transition: opacity var(--transition-base);
-}
-
-.ayah-card:hover .ayah-actions {
-    opacity: 1;
-}
-
-.ayah-action-btn {
-    width: 40px;
-    height: 40px;
-    background: var(--surface);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-md);
-    color: var(--text-light);
-    cursor: pointer;
-    transition: all var(--transition-base);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.ayah-action-btn:hover {
-    background: var(--gold);
-    color: var(--primary-dark);
-    border-color: var(--accent);
-}
-
-.ayah-action-btn.playing {
-    background: var(--accent);
-    color: var(--primary-dark);
 }
 
 /* Empty State */
@@ -2108,14 +1941,6 @@ body {
     .ayah-text {
         font-size: 1.6rem;
     }
-    
-    .audio-controls {
-        flex-direction: column;
-    }
-    
-    .audio-progress {
-        width: 100%;
-    }
 }
 
 @media (max-width: 480px) {
@@ -2133,9 +1958,5 @@ body {
     
     .ayah-text {
         font-size: 1.4rem;
-    }
-    
-    .ayah-actions {
-        opacity: 1;
     }
 }
