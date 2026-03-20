@@ -462,7 +462,6 @@ function initNavigation() {
 
 function initClock() {
     updateClock();
-    fetchHijriDate(); // Fetch Hijri date once on load
     setInterval(updateClock, 1000);
 }
 
@@ -488,10 +487,6 @@ function updateClock() {
 // Fetch and display Hijri date
 async function fetchHijriDate() {
     try {
-        const now = new Date();
-        const day = now.getDate();
-        const month = now.getMonth() + 1;
-        const year = now.getFullYear();
         
         const response = await fetch(
             `${ADHAN_API_BASE}/calendarByCity?city=Cairo&country=Egypt&method=5&school=0`
