@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mehrab-مِحراب</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@300;400;600;700;800&family=Scheherazade+New:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Decorative Background -->
+    <div class="bg-pattern"></div>
+    <div class="bg-gradient"></div>
+    
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="logo">
+                <div class="logo-icon">
+                    <i class="fas fa-moon"></i>
+                </div>
+                <h1>Mehrab-مِحراب</h1>
+            </div>
+            <div class="date-time">
+                <div class="date" id="currentDate"></div>
+                <div class="time" id="currentTime"></div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="container">
+            <button class="nav-item" data-tab="prayer">
+                <i class="fas fa-mosque"></i>
+                <span>الصلاة</span>
+            </button>
+            <button class="nav-item active" data-tab="quran">
+                <i class="fas fa-book-quran"></i>
+                <span>القرآن</span>
+            </button>
+            <button class="nav-item" data-tab="tasbih">
+                <i class="fas fa-hands-praying"></i>
+                <span>تسبيح</span>
+            </button>
+            <button class="nav-item" data-tab="azkar">
+                <i class="fas fa-star-and-crescent"></i>
+                <span>أذكار</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Prayer Times Section -->
+        <section class="tab-content" id="prayer">
+            <div class="container">
+                <div class="prayer-card">
+                    <div class="prayer-header">
+                        <h2><i class="fas fa-location-dot"></i> مواقيت الصلاة</h2>
+                        <div class="location-status" id="locationStatus">
+                            <div class="location-loading" id="locationLoading">
+                                <i class="fas fa-spinner fa-spin"></i>
+                                <span>جاري تحديد الموقع...</span>
+                            </div>
+                            <div class="location-info" id="locationInfo" style="display:none;">
+                                <i class="fas fa-map-marker-alt"></i>
+                                <span id="locationName">---</span>
+                                <button class="refresh-location" id="refreshLocation" title="تحديث الموقع">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
+                            <div class="location-error" id="locationError" style="display:none;">
+                                <i class="fas fa-exclamation-circle"></i>
+                                <span>تعذر تحديد الموقع</span>
+                                <button class="retry-location" id="retryLocation">
+                                    <i class="fas fa-redo"></i> إعادة المحاولة
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="next-prayer-banner" id="nextPrayerBanner">
+                        <div class="next-label">الصلاة القادمة</div>
+                        <div class="next-name" id="nextPrayerName">---</div>
+                        <div class="next-time" id="nextPrayerTime">--:--</div>
+                    </div>
+
+                    <div class="prayer-times-grid" id="prayerTimesGrid">
+                        <!-- Prayer times will be inserted here -->
+                    </div>
+                </div>
+
+                <!-- Qibla Compass -->
+                <div class="qibla-card">
+                    <h3><i class="fas fa-compass"></i> اتجاه القبلة</h3>
+                    <div class="qibla-compass">
+                        <div class="compass-ring">
+                            <div class="compass-needle" id="qiblaNeedle">
+                                <div class="needle-body"></div>
+                                <div class="needle-tip"></div>
+                            </div>
+                            <div class="compass-labels">
+                                <span class="label-n">N</span>
+                                <span class="label-e">E</span>
+                                <span class="label-s">S</span>
+                                <span class="label-w">W</span>
+                            </div>
+                        </div>
+                        <div class="qibla-degree" id="qiblaDegree">---°</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Quran Section -->
+        <section class="tab-content active" id="quran">
+            <div class="container">
+                <!-- Surah Selector -->
+                <div class="quran-header">
+                    <h2><i class="fas fa-book-quran"></i> القرآن الكريم</h2>
+                    <div class="surah-selector-container">
+                        <div class="surah-search-wrapper">
+                            <button class="clear-search" id="clearSearch" style="display:none;">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <select id="surahSelect" class="surah-select">
+                            <option value="">-- اختر سورة --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Surah Info Card -->
+                <div class="surah-info-card" id="surahInfoCard" style="display:none;">
+                    <div class="surah-info-header">
+                        <div class="surah-title">
+                            <h3 id="surahNameDisplay"></h3>
+                            <span id="surahMeaningDisplay"></span>
+                        </div>
+                        <div class="surah-meta">
+                            <span class="meta-badge"><i class="fas fa-verse"></i> <span id="ayahCountDisplay">0</span> آية</span>
+                            <span class="meta-badge" id="revelationTypeBadge"><i class="fas fa-landmark"></i> <span id="revelationTypeDisplay">مكية</span></span>
+                        </div>
+                    </div>
+                    <div class="bismillah-container" id="bismillahContainer">
+                        <span class="bismillah-text">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</span>
+                    </div>
+                </div>
+
+
+                <!-- Loading State -->
+                <div class="loading-state" id="loadingState" style="display:none;">
+                    <div class="loading-spinner"></div>
+                    <p>جاري تحميل السورة...</p>
+                </div>
+
+                <!-- Ayahs Container -->
+                <div class="ayahs-container" id="ayahsContainer" style="display:none;">
+                    <div class="ayahs-grid" id="ayahsGrid">
+                        <!-- Ayahs will be loaded here -->
+                    </div>
+                </div>
+
+                <!-- Empty State -->
+                <div class="empty-state" id="emptyState">
+                    <div class="empty-icon">
+                        <i class="fas fa-book-quran"></i>
+                    </div>
+                    <h3>اختر سورة للقراءة</h3>
+                    <p>اختر سورة من القائمة أعلاه لعرض الآيات الكريمة</p>
+                </div>
+
+                <!-- Error State -->
+                <div class="error-state" id="errorState" style="display:none;">
+                    <div class="error-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <h3>حدث خطأ</h3>
+                    <p id="errorMessage">تعذر تحميل السورة. يرجى المحاولة مرة أخرى.</p>
+                    <button class="retry-btn" id="retryBtn">
+                        <i class="fas fa-redo"></i> إعادة المحاولة
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tasbih Section -->
+        <section class="tab-content" id="tasbih">
+            <div class="container">
+                <div class="tasbih-container">
+                    <div class="tasbih-circle" id="tasbihCircle">
+                        <div class="inner-ring"></div>
+                        <div class="tasbih-beads">
+                            <div class="bead bead-1"></div>
+                            <div class="bead bead-2"></div>
+                            <div class="bead bead-3"></div>
+                            <div class="bead bead-4"></div>
+                            <div class="bead bead-5"></div>
+                            <div class="bead bead-6"></div>
+                            <div class="bead bead-7"></div>
+                            <div class="bead bead-8"></div>
+                            <div class="bead bead-9"></div>
+                            <div class="bead bead-10"></div>
+                            <div class="bead bead-11"></div>
+                            <div class="bead bead-12"></div>
+                            <div class="bead bead-13"></div>
+                            <div class="bead bead-14"></div>
+                            <div class="bead bead-15"></div>
+                            <div class="bead bead-16"></div>
+                            <div class="bead bead-17"></div>
+                            <div class="bead bead-18"></div>
+                            <div class="bead bead-19"></div>
+                            <div class="bead bead-20"></div>
+                            <div class="bead bead-21"></div>
+                            <div class="bead bead-22"></div>
+                            <div class="bead bead-23"></div>
+                            <div class="bead bead-24"></div>
+                            <div class="bead bead-25"></div>
+                            <div class="bead bead-26"></div>
+                            <div class="bead bead-27"></div>
+                            <div class="bead bead-28"></div>
+                            <div class="bead bead-29"></div>
+                            <div class="bead bead-30"></div>
+                            <div class="bead bead-31"></div>
+                            <div class="bead bead-32"></div>
+                            <div class="bead bead-33"></div>
+                        </div>
+                        <div class="counter-display">
+                            <div class="counter-value" id="tasbihCount">0</div>
+                            <div class="counter-target">/ <span id="tasbihTarget">33</span></div>
+                        </div>
+                    </div>
+
+                    <div class="tasbih-dhikr" id="tasbihDhikr">
+                        سُبْحَانَ الله
+                    </div>
+
+                    <div class="tasbih-controls">
+                        <button class="tasbih-btn reset-btn" id="resetBtn">
+                            <i class="fas fa-rotate-left"></i>
+                            <span>إعادة</span>
+                        </button>
+                        <button class="tasbih-btn tap-btn" id="tapBtn">
+                            <i class="fas fa-hand-pointer"></i>
+                            <span>اضغط</span>
+                        </button>
+                        <button class="tasbih-btn target-btn" id="targetBtn">
+                            <i class="fas fa-bullseye"></i>
+                            <span>الهدف</span>
+                        </button>
+                    </div>
+
+                    <div class="target-selector" id="targetSelector">
+                        <button class="target-option active" data-target="33">33</button>
+                        <button class="target-option" data-target="99">99</button>
+                        <button class="target-option" data-target="100">100</button>
+                        <button class="target-option" data-target="1000">1000</button>
+                    </div>
+
+                    <div class="tasbih-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">الحصيلة</span>
+                            <span class="stat-value" id="totalCount">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">الدورة</span>
+                            <span class="stat-value" id="roundCount">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Azkar Section -->
+        <section class="tab-content" id="azkar">
+            <div class="container">
+                <div class="azkar-header">
+                    <h2><i class="fas fa-star-and-crescent"></i> الأذكار</h2>
+                    <div class="azkar-tabs">
+                        <button class="azkar-tab active" data-type="morning">أذكار الصباح</button>
+                        <button class="azkar-tab" data-type="evening">أذكار المساء</button>
+                        <button class="azkar-tab" data-type="sleep">أذكار النوم</button>
+                        <button class="azkar-tab" data-type="wakeup">أذكار الاستيقاظ</button>
+                    </div>
+                </div>
+
+                <div class="azkar-content" id="azkarContent">
+                    <!-- Azkar cards will be inserted here -->
+                </div>
+
+                <div class="azkar-progress">
+                    <div class="progress-info">
+                        <span id="completedCount">0</span> / <span id="totalAzkar">0</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="azkarProgress"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>صدقة جارية عني و عن اهلي حفظهم الله</p>
+            <div class="footer-icons">
+                <i class="fas fa-star"></i>
+                <i class="fas fa-moon"></i>
+                <i class="fas fa-star"></i>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast">
+        <i class="fas fa-check-circle"></i>
+        <span id="toastMessage">تم بنجاح</span>
+    </div>
+
+    <!-- Celebration Animation -->
+    <div class="celebration" id="celebration">
+        <div class="confetti"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
