@@ -43,6 +43,44 @@ let appState = {
     currentTab: "quran"
 };
 
+// ==========================================
+// SAFE DOM HELPERS - Prevent null errors
+// ==========================================
+
+function safeGetElement(id) {
+    const el = document.getElementById(id);
+    if (!el) {
+        console.warn(`Element #${id} not found in DOM`);
+        return null;
+    }
+    return el;
+}
+
+function safeSetText(id, text) {
+    const el = safeGetElement(id);
+    if (el) {
+        el.textContent = text;
+    }
+}
+
+function safeSetStyle(id, property, value) {
+    const el = safeGetElement(id);
+    if (el) {
+        el.style[property] = value;
+    }
+}
+
+function safeSetDisplay(id, display) {
+    safeSetStyle(id, 'display', display);
+}
+
+function safeAddEventListener(id, event, handler) {
+    const el = safeGetElement(id);
+    if (el) {
+        el.addEventListener(event, handler);
+    }
+}
+
 // Prayer names mapping
 const prayerNames = {
     fajr: "الفجر",
@@ -73,7 +111,6 @@ document.addEventListener('DOMContentLoaded', function() {
     initTasbih();
     initAzkar();
     initClock();
-    initQibla();
     
     loadProgress();
 });
@@ -124,48 +161,52 @@ function populateSurahSelect(surahs) {
 
 function setupQuranEventListeners() {
     // Surah dropdown change
-    document.getElementById('surahSelect').addEventListener('change', function(e) {
+    safeAddEventListener('surahSelect', 'change', function(e) {
         const surahNumber = parseInt(e.target.value);
         if (surahNumber) {
             loadSurah(surahNumber);
         }
     });
     
-    // Search input
+    // Search input - use optional chaining for optional elements
     const searchInput = document.getElementById('surahSearchInput');
-    searchInput.addEventListener('input', function(e) {
-        const query = e.target.value.trim().toLowerCase();
-        const clearBtn = document.getElementById('clearSearch');
+    if (searchInput) {
+        searchInput.addEventListener('input', function(e) {
+            const query = e.target.value.trim().toLowerCase();
+            const clearBtn = document.getElementById('clearSearch');
+            
+            if (clearBtn) clearBtn.style.display = query ? 'block' : 'none';
+            filterSurahs(query);
+        });
         
-        clearBtn.style.display = query ? 'block' : 'none';
-        filterSurahs(query);
-    });
-    
-    // Clear search
-    document.getElementById('clearSearch').addEventListener('click', function() {
-        searchInput.value = '';
-        this.style.display = 'none';
-        filterSurahs('');
-    });
+        // Clear search
+        safeAddEventListener('clearSearch', 'click', function() {
+            searchInput.value = '';
+            this.style.display = 'none';
+            filterSurahs('');
+        });
+    }
     
     // Retry button
-    document.getElementById('retryBtn').addEventListener('click', function() {
+    safeAddEventListener('retryBtn', 'click', function() {
         if (appState.selectedSurah) {
             loadSurah(appState.selectedSurah);
         }
     });
     
-    // Play/Pause button
-    document.getElementById('playPauseBtn').addEventListener('click', toggleAudio);
+    // Play/Pause button (optional - may not exist in all versions)
+    safeAddEventListener('playPauseBtn', 'click', toggleAudio);
     
-    // Audio events
-    const audio = document.getElementById('quranAudio');
-    audio.addEventListener('timeupdate', updateAudioProgress);
-    audio.addEventListener('loadedmetadata', updateAudioDuration);
-    audio.addEventListener('ended', () => {
-        appState.isPlaying = false;
-        updatePlayPauseButton();
-    });
+    // Audio events (optional elements)
+    const audio = safeGetElement('quranAudio');
+    if (audio) {
+        audio.addEventListener('timeupdate', updateAudioProgress);
+        audio.addEventListener('loadedmetadata', updateAudioDuration);
+        audio.addEventListener('ended', () => {
+            appState.isPlaying = false;
+            updatePlayPauseButton();
+        });
+    }
 }
 
 function filterSurahs(query) {
@@ -195,7 +236,7 @@ async function loadSurah(surahNumber) {
     
     // Show loading
     hideAllStates();
-    document.getElementById('loadingState').style.display = 'block';
+    safeSetDisplay('loadingState', 'block');
     
     try {
         const response = await fetch(`${QURAN_API_BASE}/surah/${surahNumber}/quran-uthmani`);
@@ -215,27 +256,24 @@ async function loadSurah(surahNumber) {
 
 function displaySurah(surahData) {
     // Update info card
-    const infoCard = document.getElementById('surahInfoCard');
-    infoCard.style.display = 'block';
+    const infoCard = safeGetElement('surahInfoCard');
+    if (infoCard) infoCard.style.display = 'block';
     
-    document.getElementById('surahNameDisplay').textContent = surahData.name;
-    document.getElementById('surahMeaningDisplay').textContent = surahData.englishNameTranslation;
-    document.getElementById('ayahCountDisplay').textContent = surahData.numberOfAyahs;
-    document.getElementById('revelationTypeDisplay').textContent = 
-        surahData.revelationType === 'Meccan' ? 'مكية' : 'مدنية';
+    safeSetText('surahNameDisplay', surahData.name);
+    safeSetText('surahMeaningDisplay', surahData.englishNameTranslation);
+    safeSetText('ayahCountDisplay', surahData.numberOfAyahs);
+    safeSetText('revelationTypeDisplay', surahData.revelationType === 'Meccan' ? 'مكية' : 'مدنية');
     
     // Show/hide Bismillah (skip for Surah 9)
-    const bismillahContainer = document.getElementById('bismillahContainer');
-    bismillahContainer.style.display = surahData.number === 9 ? 'none' : 'block';
-    
-    // Update audio player
+    const bismillahContainer = safeGetElement('bismillahContainer');
+    if (bismillahContainer) bismillahContainer.style.display = surahData.number === 9 ? 'none' : 'block';
     
     // Display ayahs
     displayAyahs(surahData.ayahs, surahData.number);
     
     // Show ayahs container
     hideAllStates();
-    document.getElementById('ayahsContainer').style.display = 'block';
+    safeSetDisplay('ayahsContainer', 'block');
     
     showToast(`تم تحميل سورة ${surahData.name}`);
 }
@@ -272,52 +310,55 @@ function displayAyahs(ayahs, surahNumber) {
 async function playAyahAudio(surahNumber, ayahNumber) {
     // For now, play the full surah audio
     // In production, you'd use verse-by-verse audio
-    const audio = document.getElementById('quranAudio');
-    audio.src = `${AUDIO_BASE}/${surahNumber}.mp3`;
-    audio.play();
-    appState.isPlaying = true;
-    updatePlayPauseButton();
+    const audio = safeGetElement('quranAudio');
+    if (audio) {
+        audio.src = `${AUDIO_BASE}/${surahNumber}.mp3`;
+        audio.play();
+        appState.isPlaying = true;
+        updatePlayPauseButton();
+    }
 }
 
 function toggleAudio() {
-    const audio = document.getElementById('quranAudio');
+    const audio = safeGetElement('quranAudio');
     
-    if (appState.isPlaying) {
-        audio.pause();
-    } else {
-        audio.play();
+    if (audio) {
+        if (appState.isPlaying) {
+            audio.pause();
+        } else {
+            audio.play();
+        }
+        
+        appState.isPlaying = !appState.isPlaying;
+        updatePlayPauseButton();
     }
-    
-    appState.isPlaying = !appState.isPlaying;
-    updatePlayPauseButton();
 }
 
 function updatePlayPauseButton() {
-    const btn = document.getElementById('playPauseBtn');
-    const icon = btn.querySelector('i');
-    
-    if (appState.isPlaying) {
-        icon.className = 'fas fa-pause';
-    } else {
-        icon.className = 'fas fa-play';
+    const btn = safeGetElement('playPauseBtn');
+    if (btn) {
+        const icon = btn.querySelector('i');
+        if (icon) {
+            icon.className = appState.isPlaying ? 'fas fa-pause' : 'fas fa-play';
+        }
     }
 }
 
 function updateAudioProgress() {
-    const audio = document.getElementById('quranAudio');
-    const progress = document.getElementById('audioProgress');
+    const audio = safeGetElement('quranAudio');
+    const progress = safeGetElement('audioProgress');
     
-    if (audio.duration) {
+    if (audio && progress && audio.duration) {
         const percent = (audio.currentTime / audio.duration) * 100;
         progress.style.width = `${percent}%`;
     }
 }
 
 function updateAudioDuration() {
-    const audio = document.getElementById('quranAudio');
-    const duration = document.getElementById('audioDuration');
+    const audio = safeGetElement('quranAudio');
+    const duration = safeGetElement('audioDuration');
     
-    if (audio.duration) {
+    if (audio && duration && audio.duration) {
         const minutes = Math.floor(audio.duration / 60);
         const seconds = Math.floor(audio.duration % 60);
         duration.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
@@ -325,18 +366,18 @@ function updateAudioDuration() {
 }
 
 function hideAllStates() {
-    document.getElementById('loadingState').style.display = 'none';
-    document.getElementById('ayahsContainer').style.display = 'none';
-    document.getElementById('emptyState').style.display = 'none';
-    document.getElementById('errorState').style.display = 'none';
+    safeSetDisplay('loadingState', 'none');
+    safeSetDisplay('ayahsContainer', 'none');
+    safeSetDisplay('emptyState', 'none');
+    safeSetDisplay('errorState', 'none');
 }
 
 function showError(message) {
     hideAllStates();
-    document.getElementById('errorMessage').textContent = message;
-    document.getElementById('errorState').style.display = 'block';
-    document.getElementById('surahInfoCard').style.display = 'none';
-    document.getElementById('quranAudioPlayer').style.display = 'none';
+    safeSetText('errorMessage', message);
+    safeSetDisplay('errorState', 'block');
+    safeSetDisplay('surahInfoCard', 'none');
+    safeSetDisplay('quranAudioPlayer', 'none');
 }
 
 // ==========================================
@@ -421,27 +462,70 @@ function initNavigation() {
 
 function initClock() {
     updateClock();
+    fetchHijriDate(); // Fetch Hijri date once on load
     setInterval(updateClock, 1000);
 }
 
 function updateClock() {
     const now = new Date();
     
-    // Time
-    const hours = String(now.getHours()).padStart(2, '0');
+    // Time in 12h format with AM/PM
+    let hours = now.getHours();
     const minutes = String(now.getMinutes()).padStart(2, '0');
     const seconds = String(now.getSeconds()).padStart(2, '0');
-    document.getElementById('currentTime').textContent = `${hours}:${minutes}:${seconds}`;
+    const ampm = hours >= 12 ? 'م' : 'ص'; // Arabic: م = PM (مساء), ص = AM (صباح)
+    hours = hours % 12;
+    hours = hours ? hours : 12; // 0 becomes 12
+    const timeStr = `${hours}:${minutes}:${seconds} ${ampm}`;
+    safeSetText('currentTime', timeStr);
     
-    // Date (Arabic)
-    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    const dateStr = now.toLocaleDateString('ar-EG', options);
-    document.getElementById('currentDate').textContent = dateStr;
+    // Date (Arabic - Gregorian)
+    const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    const dateStr = now.toLocaleDateString('ar-EG', dateOptions);
+    safeSetText('currentDate', dateStr);
+}
+
+// Fetch and display Hijri date
+async function fetchHijriDate() {
+    try {
+        const now = new Date();
+        const day = now.getDate();
+        const month = now.getMonth() + 1;
+        const year = now.getFullYear();
+        
+        const response = await fetch(
+            `${ADHAN_API_BASE}/calendarByCity?city=Cairo&country=Egypt&method=5&school=0`
+        );
+        const data = await response.json();
+        
+        if (data.code === 200 && data.data) {
+            // Find today's entry
+            const todayEntry = data.data.find(entry => 
+                parseInt(entry.date.gregorian.date.split('-')[0]) === day
+            );
+            
+            if (todayEntry && todayEntry.date.hijri) {
+                const hijri = todayEntry.date.hijri;
+                const hijriDateStr = `${hijri.day} ${hijri.month.arabic} ${hijri.year} هـ`;
+                safeSetText('hijriDate', hijriDateStr);
+            }
+        }
+    } catch (error) {
+        console.warn('Could not fetch Hijri date:', error);
+        safeSetText('hijriDate', '');
+    }
 }
 
 // ==========================================
 // PRAYER TIMES - Geolocation + Al Adhan API
 // ==========================================
+
+// Cairo fallback coordinates (Egypt)
+const CAIRO_COORDINATES = {
+    latitude: 30.0444,
+    longitude: 31.2357,
+    name: 'القاهرة، مصر'
+};
 
 function initPrayerTimes() {
     // Setup refresh button
@@ -464,9 +548,9 @@ function initPrayerTimes() {
 
 function detectLocation() {
     // Show loading state
-    document.getElementById('locationLoading').style.display = 'flex';
-    document.getElementById('locationInfo').style.display = 'none';
-    document.getElementById('locationError').style.display = 'none';
+    safeSetDisplay('locationLoading', 'flex');
+    safeSetDisplay('locationInfo', 'none');
+    safeSetDisplay('locationError', 'none');
     
     if (!navigator.geolocation) {
         showLocationError('المتصفح لا يدعم تحديد الموقع');
@@ -485,19 +569,9 @@ function detectLocation() {
             fetchPrayerTimes(latitude, longitude);
         },
         (error) => {
-            let errorMsg = 'تعذر تحديد الموقع';
-            switch (error.code) {
-                case error.PERMISSION_DENIED:
-                    errorMsg = 'يرجى السماح بتحديد الموقع';
-                    break;
-                case error.POSITION_UNAVAILABLE:
-                    errorMsg = 'معلومات الموقع غير متاحة';
-                    break;
-                case error.TIMEOUT:
-                    errorMsg = 'انتهت مهلة تحديد الموقع';
-                    break;
-            }
-            showLocationError(errorMsg);
+            // Fallback to Cairo when geolocation fails
+            console.warn('Geolocation failed, using Cairo as fallback:', error.message);
+            useFallbackLocation();
         },
         {
             enableHighAccuracy: true,
@@ -505,6 +579,23 @@ function detectLocation() {
             maximumAge: 300000 // 5 minutes cache
         }
     );
+}
+
+function useFallbackLocation() {
+    // Use Cairo coordinates as default
+    appState.location = {
+        latitude: CAIRO_COORDINATES.latitude,
+        longitude: CAIRO_COORDINATES.longitude
+    };
+    appState.locationName = CAIRO_COORDINATES.name;
+    
+    // Update UI
+    safeSetDisplay('locationLoading', 'none');
+    safeSetDisplay('locationInfo', 'flex');
+    safeSetText('locationName', appState.locationName);
+    
+    // Fetch prayer times for Cairo
+    fetchPrayerTimes(CAIRO_COORDINATES.latitude, CAIRO_COORDINATES.longitude);
 }
 
 async function getLocationName(lat, lon) {
@@ -524,23 +615,23 @@ async function getLocationName(lat, lon) {
         }
         
         // Update UI
-        document.getElementById('locationLoading').style.display = 'none';
-        document.getElementById('locationInfo').style.display = 'flex';
-        document.getElementById('locationName').textContent = appState.locationName;
+        safeSetDisplay('locationLoading', 'none');
+        safeSetDisplay('locationInfo', 'flex');
+        safeSetText('locationName', appState.locationName);
         
     } catch (error) {
         console.error('Error getting location name:', error);
         appState.locationName = 'موقعك الحالي';
-        document.getElementById('locationLoading').style.display = 'none';
-        document.getElementById('locationInfo').style.display = 'flex';
-        document.getElementById('locationName').textContent = appState.locationName;
+        safeSetDisplay('locationLoading', 'none');
+        safeSetDisplay('locationInfo', 'flex');
+        safeSetText('locationName', appState.locationName);
     }
 }
 
 function showLocationError(message) {
-    document.getElementById('locationLoading').style.display = 'none';
-    document.getElementById('locationInfo').style.display = 'none';
-    document.getElementById('locationError').style.display = 'flex';
+    safeSetDisplay('locationLoading', 'none');
+    safeSetDisplay('locationInfo', 'none');
+    safeSetDisplay('locationError', 'flex');
 }
 
 async function fetchPrayerTimes(lat, lon) {
@@ -568,7 +659,6 @@ async function fetchPrayerTimes(lat, lon) {
             
             renderPrayerTimes();
             findAndDisplayNextPrayer();
-            updateQiblaDirection(lat, lon);
             
             showToast('تم تحديث مواقيت الصلاة');
         } else {
@@ -592,7 +682,9 @@ function formatTime(time24) {
 }
 
 function renderPrayerTimes() {
-    const grid = document.getElementById('prayerTimesGrid');
+    const grid = safeGetElement('prayerTimesGrid');
+    if (!grid) return;
+    
     grid.innerHTML = '';
     
     const prayerOrder = ['fajr', 'sunrise', 'dhuhr', 'asr', 'maghrib', 'isha'];
@@ -628,7 +720,6 @@ function findAndDisplayNextPrayer() {
     
     // Calculate current time in seconds from midnight
     const currentSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
-    const currentDayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     
     for (const prayer of prayerOrder) {
         const timeStr = appState.prayerTimes[prayer];
@@ -675,11 +766,8 @@ function findAndDisplayNextPrayer() {
     appState.nextPrayer = nextPrayer;
     
     // Update UI
-    const prayerNameEl = document.getElementById('nextPrayerName');
-    const prayerTimeEl = document.getElementById('nextPrayerTime');
-    
-    prayerNameEl.textContent = prayerNames[nextPrayer];
-    prayerTimeEl.textContent = formatTime(nextPrayerTime);
+    safeSetText('nextPrayerName', prayerNames[nextPrayer]);
+    safeSetText('nextPrayerTime', formatTime(nextPrayerTime));
     
     // Update active state in grid
     document.querySelectorAll('.prayer-time-item').forEach((item, index) => {
@@ -727,7 +815,7 @@ function updateNextPrayerWithCountdown() {
         }
         
         if (!nextPrayer) {
-            document.getElementById('countdown').textContent = '--:--:--';
+            safeSetText('countdown', '--:--:--');
             return;
         }
         
@@ -745,8 +833,8 @@ function updateNextPrayerWithCountdown() {
     // Update next prayer display (only if changed)
     if (appState.nextPrayer !== nextPrayer) {
         appState.nextPrayer = nextPrayer;
-        document.getElementById('nextPrayerName').textContent = prayerNames[nextPrayer];
-        document.getElementById('nextPrayerTime').textContent = formatTime(nextPrayerTime);
+        safeSetText('nextPrayerName', prayerNames[nextPrayer]);
+        safeSetText('nextPrayerTime', formatTime(nextPrayerTime));
         
         // Update active state
         document.querySelectorAll('.prayer-time-item').forEach((item, index) => {
@@ -760,37 +848,8 @@ function updateNextPrayerWithCountdown() {
     const m = Math.floor((minDiff % 3600) / 60);
     const s = minDiff % 60;
     
-    document.getElementById('countdown').textContent = 
-        `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
-
-function updateQiblaDirection(lat, lon) {
-    // Kaaba coordinates
-    const kaabaLat = 21.4225;
-    const kaabaLon = 39.8262;
-    
-    // Calculate Qibla direction
-    const lat1 = lat * Math.PI / 180;
-    const lat2 = kaabaLat * Math.PI / 180;
-    const dLon = (kaabaLon - lon) * Math.PI / 180;
-    
-    const y = Math.sin(dLon) * Math.cos(lat2);
-    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-    
-    let qibla = Math.atan2(y, x) * 180 / Math.PI;
-    qibla = (qibla + 360) % 360;
-    
-    document.getElementById('qiblaDegree').textContent = `${Math.round(qibla)}°`;
-    document.getElementById('qiblaNeedle').style.transform = `rotate(${qibla}deg)`;
-}
-
-// ==========================================
-// QIBLA COMPASS (Now handled in prayer times module)
-// ==========================================
-
-function initQibla() {
-    // Qibla direction is now calculated automatically in fetchPrayerTimes
-    // This function is kept for compatibility
+    safeSetText('countdown', 
+        `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`);
 }
 
 // ==========================================
@@ -894,11 +953,11 @@ function resetTasbih() {
 }
 
 function updateTasbihDisplay() {
-    document.getElementById('tasbihCount').textContent = appState.tasbihCount;
-    document.getElementById('tasbihTarget').textContent = appState.tasbihTarget;
-    document.getElementById('totalCount').textContent = appState.tasbihTotal;
-    document.getElementById('roundCount').textContent = appState.tasbihRound;
-    document.getElementById('tasbihDhikr').textContent = appState.dhikrs[appState.currentDhikr];
+    safeSetText('tasbihCount', appState.tasbihCount);
+    safeSetText('tasbihTarget', appState.tasbihTarget);
+    safeSetText('totalCount', appState.tasbihTotal);
+    safeSetText('roundCount', appState.tasbihRound);
+    safeSetText('tasbihDhikr', appState.dhikrs[appState.currentDhikr]);
 }
 
 function celebrateCompletion() {
@@ -1004,13 +1063,19 @@ function incrementAzkar(index) {
     const cards = document.querySelectorAll('.azkar-card');
     const card = cards[index];
     
-    card.querySelector('.count-badge span').textContent = progress;
-    
-    if (progress >= zekr.count) {
-        card.classList.add('completed');
-        card.querySelector('.azkar-btn').disabled = true;
-        card.querySelector('.azkar-btn').textContent = 'تم';
-        showToast('بارك الله فيك');
+    if (card) {
+        const countSpan = card.querySelector('.count-badge span');
+        if (countSpan) countSpan.textContent = progress;
+        
+        if (progress >= zekr.count) {
+            card.classList.add('completed');
+            const btn = card.querySelector('.azkar-btn');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'تم';
+            }
+            showToast('بارك الله فيك');
+        }
     }
     
     updateAzkarProgress();
@@ -1030,11 +1095,11 @@ function updateAzkarProgress() {
         completed += Math.min(progress[index] || 0, zekr.count);
     });
     
-    document.getElementById('completedCount').textContent = completed;
-    document.getElementById('totalAzkar').textContent = total;
+    safeSetText('completedCount', completed);
+    safeSetText('totalAzkar', total);
     
     const percentage = total > 0 ? (completed / total) * 100 : 0;
-    document.getElementById('azkarProgress').style.width = percentage + '%';
+    safeSetStyle('azkarProgress', 'width', percentage + '%');
 }
 
 // ==========================================
@@ -1086,14 +1151,16 @@ function loadProgress() {
 // ==========================================
 
 function showToast(message) {
-    const toast = document.getElementById('toast');
-    document.getElementById('toastMessage').textContent = message;
+    const toast = safeGetElement('toast');
+    safeSetText('toastMessage', message);
     
-    toast.classList.add('show');
-    
-    setTimeout(() => {
-        toast.classList.remove('show');
-    }, 2500);
+    if (toast) {
+        toast.classList.add('show');
+        
+        setTimeout(() => {
+            toast.classList.remove('show');
+        }, 2500);
+    }
 }
 
 // ==========================================
@@ -1116,6 +1183,68 @@ style.textContent = `
     }
     .target-selector.show {
         display: flex;
+    }
+    /* Countdown timer */
+    .countdown-time {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: var(--gold);
+        margin-top: 8px;
+        font-family: 'Cairo', sans-serif;
+    }
+    /* Search input */
+    .surah-search {
+        width: 100%;
+        padding: 10px 15px;
+        border: 1px solid rgba(255,255,255,0.2);
+        border-radius: 8px;
+        background: rgba(255,255,255,0.1);
+        color: #fff;
+        font-family: 'Cairo', sans-serif;
+        font-size: 1rem;
+    }
+    .surah-search::placeholder {
+        color: rgba(255,255,255,0.5);
+    }
+    .surah-search:focus {
+        outline: none;
+        border-color: var(--gold);
+    }
+    /* Audio player */
+    .quran-audio-player {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 15px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 12px;
+        margin-top: 20px;
+    }
+    .audio-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: var(--gold);
+        border: none;
+        color: #1a1a2e;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .audio-progress {
+        flex: 1;
+    }
+    .progress-track {
+        height: 4px;
+        background: rgba(255,255,255,0.2);
+        border-radius: 2px;
+    }
+    .progress-fill {
+        height: 100%;
+        background: var(--gold);
+        width: 0%;
+        transition: width 0.2s;
     }
 `;
 document.head.appendChild(style);
