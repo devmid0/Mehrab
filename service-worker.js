@@ -60,7 +60,11 @@ self.addEventListener('install', (event) => {
         );
       }),
       // Pre-cache Quran surah list
-      preCacheSurahList()
+      preCacheSurahList(),
+      // Start full Quran cache in background (don't block install)
+      preCacheAllSurahs(true).catch(err => {
+        console.log('[SW] Background Quran cache error:', err);
+      })
     ]).then(() => {
       console.log('[SW] Skip waiting');
       return self.skipWaiting();
@@ -73,13 +77,177 @@ async function preCacheSurahList() {
   try {
     console.log('[SW] Pre-caching Quran surah list...');
     const cache = await caches.open(QURAN_CACHE);
+    
+    // Check if already cached
+    const existing = await cache.match(SURAH_LIST_URL);
+    if (existing) {
+      console.log('[SW] Surah list already cached');
+      return true;
+    }
+    
     const response = await fetch(SURAH_LIST_URL);
     if (response.ok) {
       await cache.put(SURAH_LIST_URL, response.clone());
       console.log('[SW] Surah list cached successfully');
+      return true;
     }
   } catch (error) {
     console.log('[SW] Could not pre-cache surah list:', error);
+  }
+  return false;
+}
+
+// Retry surah list caching (can be called when coming online)
+async function retrySurahListCaching() {
+  console.log('[SW] Retrying Quran surah list caching...');
+  const result = await preCacheSurahList();
+  if (result) {
+    // Notify all clients
+    const clients = await self.clients.matchAll();
+    clients.forEach(client => {
+      client.postMessage({ type: 'SURAHLIST_CACHED' });
+    });
+  }
+  return result;
+}
+
+// Check if surah list is cached
+async function isSurahListCached() {
+  try {
+    const cache = await caches.open(QURAN_CACHE);
+    const response = await cache.match(SURAH_LIST_URL);
+    return !!response;
+  } catch (error) {
+    return false;
+  }
+}
+
+// Pre-cache ALL 114 surahs for full offline access
+async function preCacheAllSurahs(skipExisting = true) {
+  console.log('[SW] Starting full Quran cache...');
+  const cache = await caches.open(QURAN_CACHE);
+  const totalSurahs = 114;
+  let cached = 0;
+  let failed = 0;
+  let skipped = 0;
+  
+  // Notify clients that caching started
+  notifyClients({ type: 'QURAN_CACHE_STARTED', total: totalSurahs });
+  
+  for (let i = 1; i <= totalSurahs; i++) {
+    const url = `${QURAN_API_BASE}/surah/${i}/quran-uthmani`;
+    
+    try {
+      // Check if already cached
+      if (skipExisting) {
+        const existing = await cache.match(url);
+        if (existing) {
+          skipped++;
+          // Notify progress every 10 surahs
+          if (i % 10 === 0) {
+            notifyClients({
+              type: 'QURAN_CACHE_PROGRESS',
+              current: i,
+              total: totalSurahs,
+              cached,
+              skipped,
+              failed
+            });
+          }
+          continue;
+        }
+      }
+      
+      const response = await fetch(url);
+      if (response.ok) {
+        await cache.put(url, response.clone());
+        cached++;
+      } else {
+        failed++;
+      }
+    } catch (error) {
+      console.log(`[SW] Failed to cache surah ${i}:`, error);
+      failed++;
+    }
+    
+    // Notify progress every 5 surahs to keep user informed
+    if (i % 5 === 0 || i === totalSurahs) {
+      notifyClients({
+        type: 'QURAN_CACHE_PROGRESS',
+        current: i,
+        total: totalSurahs,
+        cached,
+        skipped,
+        failed,
+        percent: Math.round((i / totalSurahs) * 100)
+      });
+    }
+  }
+  
+  // Mark as fully cached
+  await cache.put(
+    `${QURAN_API_BASE}/_all_cached`,
+    new Response(JSON.stringify({
+      cached: cached,
+      skipped: skipped,
+      failed: failed,
+      timestamp: Date.now(),
+      version: '1.0'
+    }))
+  );
+  
+  console.log(`[SW] Full Quran cache complete: ${cached} cached, ${skipped} skipped, ${failed} failed`);
+  
+  // Notify completion
+  notifyClients({
+    type: 'QURAN_CACHE_COMPLETE',
+    cached,
+    skipped,
+    failed,
+    success: failed === 0
+  });
+  
+  return { cached, skipped, failed };
+}
+
+// Check if all surahs are cached
+async function isFullQuranCached() {
+  try {
+    const cache = await caches.open(QURAN_CACHE);
+    const status = await cache.match(`${QURAN_API_BASE}/_all_cached`);
+    if (status) {
+      const data = await status.json();
+      return data.cached + data.skipped >= 114;
+    }
+  } catch (error) {
+    return false;
+  }
+  return false;
+}
+
+// Get Quran cache status
+async function getQuranCacheStatus() {
+  try {
+    const cache = await caches.open(QURAN_CACHE);
+    const status = await cache.match(`${QURAN_API_BASE}/_all_cached`);
+    if (status) {
+      return await status.json();
+    }
+  } catch (error) {
+    console.log('[SW] Could not get cache status:', error);
+  }
+  return null;
+}
+
+// Notify all clients
+async function notifyClients(message) {
+  try {
+    const clients = await self.clients.matchAll();
+    clients.forEach(client => {
+      client.postMessage(message);
+    });
+  } catch (error) {
+    // Ignore errors
   }
 }
 
@@ -209,6 +377,7 @@ async function quranSurahStrategy(request) {
   }
   
   // Not in cache - fetch from network
+  let isNetworkError = false;
   try {
     const networkResponse = await fetch(request);
     if (networkResponse.ok) {
@@ -217,10 +386,18 @@ async function quranSurahStrategy(request) {
     }
   } catch (error) {
     console.log('[SW] Surah fetch failed:', error);
+    isNetworkError = true;
   }
   
-  // Return offline error
-  return createQuranOfflineResponse('السورة المطلوبة غير متاحة حالياً. يرجى الاتصال بالإنترنت لتحميلها.');
+  // Return offline error with clear messaging
+  // isNetworkError = true means we tried but failed (connection issue)
+  // isNetworkError = false means the surah was never cached
+  return createQuranOfflineResponse(
+    isNetworkError 
+      ? 'تعذر الاتصال. يرجى التحقق من اتصالك بالإنترنت.'
+      : 'هذه السورة غير محملة. قم بتحميلها أثناء الاتصال بالإنترنت أولاً.',
+    !isNetworkError // isNotCached = true if not network error (surah was never cached)
+  );
 }
 
 // Refresh cache in background without blocking
@@ -238,22 +415,33 @@ function refreshCacheInBackground(request, cache) {
 }
 
 // Create Quran-specific offline response
-function createQuranOfflineResponse(message) {
+function createQuranOfflineResponse(message, isNotCached = true) {
+  const offlineMessage = isNotCached 
+    ? 'هذه السورة غير محملة بعد. قم بتحميلها أثناء الاتصال بالإنترنت.'
+    : 'تعذر الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت.';
+  
   return new Response(
     JSON.stringify({
       status: 'offline',
       error: true,
       code: 503,
-      message: message,
+      message: message || offlineMessage,
       cached: false,
-      suggestion: 'قم بتحميل السورة أثناء الاتصال بالإنترنت لتتمكن من قراءتها لاحقاً.'
+      notCached: isNotCached,
+      suggestion: isNotCached 
+        ? 'اختر سورة أخرى قمت بتحميلها سابقاً، أو اتصل بالإنترنت لتحميل هذه السورة.'
+        : 'قم بتحميل السورة أثناء الاتصال بالإنترنت لتتمكن من قراءتها لاحقاً.',
+      action: isNotCached
+        ? 'LOAD_ONLINE'
+        : 'CHECK_CONNECTION'
     }),
     {
       status: 200, // Return 200 so app can handle the response
       statusText: 'OK',
       headers: new Headers({
         'Content-Type': 'application/json',
-        'X-Quran-Cache': 'offline'
+        'X-Quran-Cache': 'offline',
+        'X-Quran-Not-Cached': isNotCached ? 'true' : 'false'
       })
     }
   );
@@ -432,54 +620,63 @@ self.addEventListener('message', (event) => {
   // Pre-cache all surahs (for power users)
   if (event.data && event.data.type === 'CACHE_ALL_SURAHS') {
     event.waitUntil(
-      cacheAllSurahs(event.ports?.[0])
+      preCacheAllSurahs(false) // Force re-cache all
+    );
+  }
+  
+  // Get Quran cache status
+  if (event.data && event.data.type === 'GET_QURAN_CACHE_STATUS') {
+    event.waitUntil(
+      getQuranCacheStatus().then(status => {
+        event.ports?.[0]?.postMessage({
+          type: 'QURAN_CACHE_STATUS',
+          status: status
+        });
+      })
+    );
+  }
+  
+  // Check if full Quran is cached
+  if (event.data && event.data.type === 'CHECK_FULL_QURAN_CACHED') {
+    event.waitUntil(
+      isFullQuranCached().then(cached => {
+        event.ports?.[0]?.postMessage({
+          type: 'FULL_QURAN_CACHED',
+          cached: cached
+        });
+      })
+    );
+  }
+  
+  // Retry caching surah list
+  if (event.data && event.data.type === 'CACHE_SURAHLIST') {
+    event.waitUntil(
+      retrySurahListCaching().then(result => {
+        const clients = self.clients.matchAll();
+        clients.then(allClients => {
+          allClients.forEach(client => {
+            client.postMessage({ 
+              type: 'SURAHLIST_CACHED', 
+              success: result 
+            });
+          });
+        });
+      })
+    );
+  }
+  
+  // Check if surah list is cached
+  if (event.data && event.data.type === 'CHECK_SURAHLIST_CACHED') {
+    event.waitUntil(
+      isSurahListCached().then(cached => {
+        event.ports?.[0]?.postMessage({ 
+          type: 'SURAHLIST_CACHED_STATUS', 
+          cached: cached 
+        });
+      })
     );
   }
 });
-
-// Cache all 114 surahs
-async function cacheAllSurahs(port) {
-  const cache = await caches.open(QURAN_CACHE);
-  let cached = 0;
-  let failed = 0;
-  
-  for (let i = 1; i <= 114; i++) {
-    try {
-      const url = `${QURAN_API_BASE}/surah/${i}/quran-uthmani`;
-      const response = await fetch(url);
-      if (response.ok) {
-        await cache.put(url, response.clone());
-        cached++;
-      } else {
-        failed++;
-      }
-    } catch (error) {
-      failed++;
-    }
-    
-    // Notify progress every 10 surahs
-    if (i % 10 === 0 && port) {
-      port.postMessage({ 
-        type: 'CACHE_PROGRESS', 
-        current: i, 
-        total: 114,
-        cached,
-        failed 
-      });
-    }
-  }
-  
-  console.log('[SW] Cached all surahs:', cached, 'success,', failed, 'failed');
-  
-  // Notify completion
-  if (port) {
-    port.postMessage({ 
-      type: 'CACHE_ALL_COMPLETE', 
-      cached, 
-      failed 
-    });
-  }
-}
 
 // Background sync for failed requests (if supported)
 self.addEventListener('sync', (event) => {
