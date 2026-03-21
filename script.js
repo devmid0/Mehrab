@@ -124,10 +124,35 @@ async function initQuran() {
 }
 
 async function loadSurahsList() {
+    const apiUrl = `${QURAN_API_BASE}/surah`;
+    
     try {
-        const response = await fetch(`${QURAN_API_BASE}/surah`);
-        const data = await response.json();
+        const response = await fetch(apiUrl);
         
+        // Check if it's our offline response
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            const text = await response.text();
+            const data = JSON.parse(text);
+            
+            // Check if it's an offline/error response
+            if (data.status === 'offline' || data.error) {
+                console.log('Surah list not available offline');
+                // Show a message but don't block the app
+                showToast('قائمة السور غير متاحة - يرجى الاتصال بالإنترنت');
+                return;
+            }
+            
+            if (data.code === 200 && data.data) {
+                appState.surahs = data.data;
+                populateSurahDropdown(data.data);
+                populateSurahSelect(data.data);
+                return;
+            }
+        }
+        
+        // Standard JSON response
+        const data = await response.json();
         if (data.code === 200 && data.data) {
             appState.surahs = data.data;
             populateSurahDropdown(data.data);
@@ -223,20 +248,92 @@ async function loadSurah(surahNumber) {
     hideAllStates();
     safeSetDisplay('loadingState', 'block');
     
+    const apiUrl = `${QURAN_API_BASE}/surah/${surahNumber}/quran-uthmani`;
+    
     try {
-        const response = await fetch(`${QURAN_API_BASE}/surah/${surahNumber}/quran-uthmani`);
+        const response = await fetch(apiUrl);
+        
+        // Check if response is our offline JSON
+        const contentType = response.headers.get('content-type');
+        const isOfflineResponse = contentType && contentType.includes('application/json');
+        
+        if (isOfflineResponse) {
+            // Check if it's an error/offline response
+            const data = await response.json();
+            if (data.status === 'offline' || data.error) {
+                // Try to load from SW cache directly
+                const cachedData = await loadSurahFromCache(surahNumber);
+                if (cachedData) {
+                    displaySurah(cachedData);
+                    showToast('تم تحميل السورة من الذاكرة المؤقتة');
+                } else {
+                    throw new Error(data.message || 'تعذر تحميل السورة');
+                }
+                return;
+            }
+        }
+        
         const data = await response.json();
         
         if (data.code === 200 && data.data) {
             appState.currentSurahData = data.data;
             displaySurah(data.data);
+            
+            // Cache for offline use
+            cacheSurahInSW(surahNumber);
         } else {
             throw new Error('Invalid response');
         }
     } catch (error) {
         console.error('Error loading surah:', error);
-        showError('تعذر تحميل السورة. يرجى المحاولة مرة أخرى.');
+        
+        // Try to load from SW cache on any error
+        const cachedData = await loadSurahFromCache(surahNumber);
+        if (cachedData) {
+            displaySurah(cachedData);
+            showToast('تم تحميل السورة من الذاكرة المؤقتة');
+        } else {
+            showError('تعذر تحميل السورة. يرجى المحاولة مرة أخرى.');
+        }
     }
+}
+
+// Cache surah in service worker
+function cacheSurahInSW(surahNumber) {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+            type: 'CACHE_SURAH',
+            surahNumber: surahNumber
+        });
+    }
+}
+
+// Load surah directly from service worker cache
+async function loadSurahFromCache(surahNumber) {
+    if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
+        return null;
+    }
+    
+    try {
+        const sw = navigator.serviceWorker.controller;
+        const apiUrl = `${QURAN_API_BASE}/surah/${surahNumber}/quran-uthmani`;
+        
+        // Try to get from SW via message
+        // For now, we'll try fetching directly which will hit SW cache
+        const response = await fetch(apiUrl);
+        if (response.ok) {
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                const data = await response.json();
+                if (data.code === 200 && data.data) {
+                    return data.data;
+                }
+            }
+        }
+    } catch (error) {
+        console.log('Could not load from cache:', error);
+    }
+    return null;
 }
 
 function displaySurah(surahData) {
@@ -461,6 +558,63 @@ function detectLocation() {
     safeSetDisplay('locationInfo', 'none');
     safeSetDisplay('locationError', 'none');
     
+    // If offline, try to load from localStorage first
+    if (!navigator.onLine) {
+        console.log('[Location] Offline mode - checking localStorage...');
+        const cached = loadLocationData();
+        const cachedTimes = loadPrayerTimes();
+        
+        if (cached && cachedTimes) {
+            // We have both location and prayer times cached
+            console.log('[Location] Using cached location and prayer times');
+            appState.location = {
+                latitude: cached.latitude,
+                longitude: cached.longitude
+            };
+            appState.locationName = cached.locationName || 'موقعك الحالي';
+            
+            safeSetDisplay('locationLoading', 'none');
+            safeSetDisplay('locationInfo', 'flex');
+            safeSetText('locationName', appState.locationName);
+            
+            // Load cached prayer times
+            appState.prayerTimes = {
+                fajr: cachedTimes.timings.Fajr,
+                sunrise: cachedTimes.timings.Sunrise,
+                dhuhr: cachedTimes.timings.Dhuhr,
+                asr: cachedTimes.timings.Asr,
+                maghrib: cachedTimes.timings.Maghrib,
+                isha: cachedTimes.timings.Isha
+            };
+            renderPrayerTimes();
+            findAndDisplayNextPrayer();
+            showToast('تم تحميل مواقيت الصلاة من الذاكرة المؤقتة');
+            return;
+        } else if (cached) {
+            // Have location but no prayer times
+            console.log('[Location] Using cached location, fetching prayer times...');
+            appState.location = {
+                latitude: cached.latitude,
+                longitude: cached.longitude
+            };
+            appState.locationName = cached.locationName || 'موقعك الحالي';
+            
+            safeSetDisplay('locationLoading', 'none');
+            safeSetDisplay('locationInfo', 'flex');
+            safeSetText('locationName', appState.locationName);
+            
+            // Try to fetch prayer times (will fail and use Cairo fallback)
+            fetchPrayerTimes(cached.latitude, cached.longitude, true);
+            return;
+        } else {
+            // No cached data at all - use Cairo fallback
+            console.log('[Location] No cached data - using Cairo fallback');
+            useFallbackLocation(true);
+            return;
+        }
+    }
+    
+    // Online: try geolocation first
     if (!navigator.geolocation) {
         showLocationError('المتصفح لا يدعم تحديد الموقع');
         return;
@@ -478,9 +632,40 @@ function detectLocation() {
             fetchPrayerTimes(latitude, longitude);
         },
         (error) => {
-            // Fallback to Cairo when geolocation fails
-            console.warn('Geolocation failed, using Cairo as fallback:', error.message);
-            useFallbackLocation();
+            // Geolocation failed - try cached data or Cairo fallback
+            console.warn('Geolocation failed:', error.message);
+            
+            const cached = loadLocationData();
+            const cachedTimes = loadPrayerTimes();
+            
+            if (cached && cachedTimes) {
+                // Use cached data
+                console.log('[Location] Using cached data after geolocation failure');
+                appState.location = {
+                    latitude: cached.latitude,
+                    longitude: cached.longitude
+                };
+                appState.locationName = cached.locationName || 'موقعك الحالي';
+                
+                safeSetDisplay('locationLoading', 'none');
+                safeSetDisplay('locationInfo', 'flex');
+                safeSetText('locationName', appState.locationName);
+                
+                appState.prayerTimes = {
+                    fajr: cachedTimes.timings.Fajr,
+                    sunrise: cachedTimes.timings.Sunrise,
+                    dhuhr: cachedTimes.timings.Dhuhr,
+                    asr: cachedTimes.timings.Asr,
+                    maghrib: cachedTimes.timings.Maghrib,
+                    isha: cachedTimes.timings.Isha
+                };
+                renderPrayerTimes();
+                findAndDisplayNextPrayer();
+                showToast('تم تحميل مواقيت الصلاة من الذاكرة المؤقتة');
+            } else {
+                // No cache - use Cairo
+                useFallbackLocation();
+            }
         },
         {
             enableHighAccuracy: true,
@@ -490,7 +675,7 @@ function detectLocation() {
     );
 }
 
-function useFallbackLocation() {
+function useFallbackLocation(isOfflineFallback = false) {
     // Use Cairo coordinates as default
     appState.location = {
         latitude: CAIRO_COORDINATES.latitude,
@@ -498,13 +683,16 @@ function useFallbackLocation() {
     };
     appState.locationName = CAIRO_COORDINATES.name;
     
+    // Save Cairo as the location
+    saveLocationData(CAIRO_COORDINATES.latitude, CAIRO_COORDINATES.longitude, CAIRO_COORDINATES.name);
+    
     // Update UI
     safeSetDisplay('locationLoading', 'none');
     safeSetDisplay('locationInfo', 'flex');
     safeSetText('locationName', appState.locationName);
     
     // Fetch prayer times for Cairo
-    fetchPrayerTimes(CAIRO_COORDINATES.latitude, CAIRO_COORDINATES.longitude);
+    fetchPrayerTimes(CAIRO_COORDINATES.latitude, CAIRO_COORDINATES.longitude, isOfflineFallback);
 }
 
 async function getLocationName(lat, lon) {
@@ -523,6 +711,9 @@ async function getLocationName(lat, lon) {
             appState.locationName = 'موقعك الحالي';
         }
         
+        // Save location data to localStorage
+        saveLocationData(lat, lon, appState.locationName);
+        
         // Update UI
         safeSetDisplay('locationLoading', 'none');
         safeSetDisplay('locationInfo', 'flex');
@@ -530,7 +721,15 @@ async function getLocationName(lat, lon) {
         
     } catch (error) {
         console.error('Error getting location name:', error);
-        appState.locationName = 'موقعك الحالي';
+        
+        // Try to load from cache on error
+        const cached = loadLocationData();
+        if (cached) {
+            appState.locationName = cached.locationName || 'موقعك الحالي';
+        } else {
+            appState.locationName = 'موقعك الحالي';
+        }
+        
         safeSetDisplay('locationLoading', 'none');
         safeSetDisplay('locationInfo', 'flex');
         safeSetText('locationName', appState.locationName);
@@ -543,7 +742,28 @@ function showLocationError(message) {
     safeSetDisplay('locationError', 'flex');
 }
 
-async function fetchPrayerTimes(lat, lon) {
+async function fetchPrayerTimes(lat, lon, isOffline = false) {
+    // If offline, try to load from cache first
+    if (!navigator.onLine) {
+        const cached = loadPrayerTimes();
+        if (cached && cached.latitude === lat && cached.longitude === lon) {
+            console.log('[PrayerTimes] Loading from offline cache');
+            appState.prayerTimes = {
+                fajr: cached.timings.Fajr,
+                sunrise: cached.timings.Sunrise,
+                dhuhr: cached.timings.Dhuhr,
+                asr: cached.timings.Asr,
+                maghrib: cached.timings.Maghrib,
+                isha: cached.timings.Isha
+            };
+            appState.location = { latitude: lat, longitude: lon };
+            renderPrayerTimes();
+            findAndDisplayNextPrayer();
+            showToast('تم تحميل مواقيت الصلاة من الذاكرة المؤقتة');
+            return;
+        }
+    }
+    
     try {
         const now = new Date();
         const date = `${now.getDate()}-${now.getMonth() + 1}-${now.getFullYear()}`;
@@ -566,16 +786,45 @@ async function fetchPrayerTimes(lat, lon) {
                 isha: timings.Isha
             };
             
+            // Save to localStorage for offline use
+            savePrayerTimes(timings, lat, lon);
+            
+            // Update location if not set
+            if (!appState.location) {
+                appState.location = { latitude: lat, longitude: lon };
+            }
+            
             renderPrayerTimes();
             findAndDisplayNextPrayer();
             
-            showToast('تم تحديث مواقيت الصلاة');
+            if (!isOffline) {
+                showToast('تم تحديث مواقيت الصلاة');
+            }
         } else {
             throw new Error('Invalid API response');
         }
     } catch (error) {
         console.error('Error fetching prayer times:', error);
-        showToast('تعذر تحميل مواقيت الصلاة');
+        
+        // Try to load from cache on error
+        const cached = loadPrayerTimes();
+        if (cached) {
+            console.log('[PrayerTimes] Falling back to cached data after error');
+            appState.prayerTimes = {
+                fajr: cached.timings.Fajr,
+                sunrise: cached.timings.Sunrise,
+                dhuhr: cached.timings.Dhuhr,
+                asr: cached.timings.Asr,
+                maghrib: cached.timings.Maghrib,
+                isha: cached.timings.Isha
+            };
+            appState.location = { latitude: cached.latitude, longitude: cached.longitude };
+            renderPrayerTimes();
+            findAndDisplayNextPrayer();
+            showToast('تم تحميل مواقيت الصلاة من الذاكرة المؤقتة');
+        } else if (!isOffline) {
+            showToast('تعذر تحميل مواقيت الصلاة');
+        }
     }
 }
 
@@ -1012,6 +1261,78 @@ function updateAzkarProgress() {
 }
 
 // ==========================================
+// LOCATION & PRAYER TIMES STORAGE
+// ==========================================
+
+const LOCATION_STORAGE_KEY = 'islamicAppLocation';
+const PRAYER_TIMES_STORAGE_KEY = 'islamicAppPrayerTimes';
+
+function saveLocationData(latitude, longitude, locationName) {
+    try {
+        const data = {
+            latitude,
+            longitude,
+            locationName: locationName || 'موقعك الحالي',
+            savedAt: Date.now()
+        };
+        localStorage.setItem(LOCATION_STORAGE_KEY, JSON.stringify(data));
+        console.log('[Storage] Location saved:', data);
+    } catch (e) {
+        console.warn('[Storage] Could not save location data:', e);
+    }
+}
+
+function loadLocationData() {
+    try {
+        const saved = localStorage.getItem(LOCATION_STORAGE_KEY);
+        if (saved) {
+            const data = JSON.parse(saved);
+            console.log('[Storage] Location loaded:', data);
+            return data;
+        }
+    } catch (e) {
+        console.warn('[Storage] Could not load location data:', e);
+    }
+    return null;
+}
+
+function savePrayerTimes(timings, latitude, longitude) {
+    try {
+        const data = {
+            timings,
+            latitude,
+            longitude,
+            savedAt: Date.now(),
+            date: new Date().toDateString() // Track which day this is for
+        };
+        localStorage.setItem(PRAYER_TIMES_STORAGE_KEY, JSON.stringify(data));
+        console.log('[Storage] Prayer times saved for date:', data.date);
+    } catch (e) {
+        console.warn('[Storage] Could not save prayer times:', e);
+    }
+}
+
+function loadPrayerTimes() {
+    try {
+        const saved = localStorage.getItem(PRAYER_TIMES_STORAGE_KEY);
+        if (saved) {
+            const data = JSON.parse(saved);
+            // Check if data is from today
+            const today = new Date().toDateString();
+            if (data.date === today) {
+                console.log('[Storage] Prayer times loaded (today):', data);
+                return data;
+            } else {
+                console.log('[Storage] Prayer times from different day:', data.date, 'vs', today);
+            }
+        }
+    } catch (e) {
+        console.warn('[Storage] Could not load prayer times:', e);
+    }
+    return null;
+}
+
+// ==========================================
 // STORAGE
 // ==========================================
 
@@ -1324,6 +1645,37 @@ function cacheAPIResponse(url) {
             url: url
         });
     }
+}
+
+// Listen for service worker messages
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (event) => {
+        const { type, surah, cached, failed } = event.data || {};
+        
+        switch (type) {
+            case 'SURAH_CACHED':
+                console.log(`Surah ${surah} cached for offline use`);
+                break;
+                
+            case 'CACHE_CLEARED':
+                console.log('Cache cleared by service worker');
+                showToast('تم مسح الذاكرة المؤقتة');
+                break;
+                
+            case 'CACHE_PROGRESS':
+                console.log(`Caching progress: ${current}/${total}`);
+                break;
+                
+            case 'CACHE_ALL_COMPLETE':
+                console.log(`All surahs cached: ${cached} success, ${failed} failed`);
+                if (failed === 0) {
+                    showToast(`تم تحميل جميع السور للقراءة بدون إنترنت!`);
+                } else {
+                    showToast(`تم تحميل ${cached} من 114 سورة`);
+                }
+                break;
+        }
+    });
 }
 
 // Export for debugging (in development)
