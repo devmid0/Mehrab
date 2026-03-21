@@ -109,6 +109,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initTasbih();
     initAzkar();
     initClock();
+    initPWA();
     
     loadProgress();
 });
@@ -1120,3 +1121,213 @@ style.textContent = `
     }
 `;
 document.head.appendChild(style);
+
+// ==========================================
+// PWA INITIALIZATION
+// ==========================================
+
+let deferredPrompt = null;
+let isAppInstalled = false;
+
+// Initialize PWA functionality
+function initPWA() {
+    // Check if already installed
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+        isAppInstalled = true;
+        hideInstallButton();
+        return;
+    }
+
+    // Listen for app installed event
+    window.addEventListener('appinstalled', () => {
+        isAppInstalled = true;
+        hideInstallButton();
+        showToast('تم تثبيت التطبيق بنجاح!');
+        deferredPrompt = null;
+    });
+
+    // Capture install prompt
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        
+        // Check if user previously dismissed
+        const dismissed = localStorage.getItem('mehrab_install_dismissed');
+        const dismissedTime = localStorage.getItem('mehrab_install_dismissed_time');
+        
+        if (dismissed && dismissedTime) {
+            const weekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+            if (parseInt(dismissedTime) > weekAgo) {
+                return; // Don't show for 1 week
+            }
+        }
+        
+        showInstallButton();
+    });
+
+    // Initialize offline detection
+    initOfflineDetection();
+    
+    // Setup update notification
+    setupUpdateNotification();
+}
+
+// Show install button
+function showInstallButton() {
+    const btn = document.getElementById('installBtn');
+    if (btn) {
+        btn.style.display = 'flex';
+        btn.classList.remove('hidden');
+    }
+}
+
+// Hide install button
+function hideInstallButton() {
+    const btn = document.getElementById('installBtn');
+    if (btn) {
+        btn.style.display = 'none';
+        btn.classList.add('hidden');
+    }
+}
+
+// Handle install button click
+document.addEventListener('DOMContentLoaded', () => {
+    const installBtn = document.getElementById('installBtn');
+    if (installBtn) {
+        installBtn.addEventListener('click', async () => {
+            if (!deferredPrompt) {
+                // Try alternative: open app store or show instructions
+                showToast('لتثبيت التطبيق: اضغط على القائمة ← إضافة إلى الشاشة الرئيسية');
+                return;
+            }
+            
+            // Show native install prompt
+            deferredPrompt.prompt();
+            
+            // Wait for user response
+            const { outcome } = await deferredPrompt.userChoice;
+            
+            if (outcome === 'accepted') {
+                showToast('شكراً لتثبيت التطبيق!');
+            } else if (outcome === 'dismissed') {
+                // Remember dismissal for 1 week
+                localStorage.setItem('mehrab_install_dismissed', 'true');
+                localStorage.setItem('mehrab_install_dismissed_time', Date.now().toString());
+            }
+            
+            deferredPrompt = null;
+            hideInstallButton();
+        });
+    }
+});
+
+// Offline detection
+function initOfflineDetection() {
+    // Create offline indicator element
+    const indicator = document.createElement('div');
+    indicator.className = 'offline-indicator';
+    indicator.id = 'offlineIndicator';
+    indicator.textContent = '🕌 أنت الآن في وضع عدم الاتصال';
+    document.body.insertBefore(indicator, document.body.firstChild);
+    
+    // Update status on load
+    updateOnlineStatus();
+    
+    // Listen for online/offline events
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+}
+
+function updateOnlineStatus() {
+    const indicator = document.getElementById('offlineIndicator');
+    if (!indicator) return;
+    
+    if (!navigator.onLine) {
+        indicator.classList.add('show');
+        showToast('الاتصال انقطع - بعض الميزات قد لا تعمل');
+    } else {
+        indicator.classList.remove('show');
+    }
+}
+
+// Check online status helper
+function isOnline() {
+    return navigator.onLine;
+}
+
+// Setup service worker update notification
+function setupUpdateNotification() {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then((registration) => {
+            // Check for updates every hour
+            setInterval(() => {
+                registration.update();
+            }, 60 * 60 * 1000);
+            
+            // Listen for updates
+            registration.addEventListener('updatefound', () => {
+                const newWorker = registration.installing;
+                
+                newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        // New version available
+                        showUpdateNotification();
+                    }
+                });
+            });
+        });
+        
+        // Listen for controller change (new SW activated)
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            window.location.reload();
+        });
+    }
+}
+
+// Show update notification
+function showUpdateNotification() {
+    let notification = document.getElementById('updateNotification');
+    if (!notification) {
+        notification = document.createElement('div');
+        notification.id = 'updateNotification';
+        notification.className = 'update-notification';
+        notification.innerHTML = `
+            <i class="fas fa-sync-alt"></i>
+            <span>يوجد تحديث جديد!</span>
+            <button id="updateBtn">تحديث</button>
+        `;
+        document.body.appendChild(notification);
+        
+        document.getElementById('updateBtn')?.addEventListener('click', () => {
+            window.location.reload();
+        });
+    }
+    notification.classList.add('show');
+}
+
+// Clear cache (for debugging/reset)
+function clearSWCache() {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then((registration) => {
+            if (registration.active) {
+                registration.active.postMessage({ type: 'CLEAR_CACHE' });
+            }
+        });
+    }
+}
+
+// Cache specific data (for pre-caching)
+function cacheAPIResponse(url) {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+            type: 'CACHE_API',
+            url: url
+        });
+    }
+}
+
+// Export for debugging (in development)
+if (typeof window !== 'undefined') {
+    window.clearSWCache = clearSWCache;
+    window.cacheAPIResponse = cacheAPIResponse;
+}

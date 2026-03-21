@@ -1319,6 +1319,123 @@ body {
 }
 
 /* ==========================================
+   PWA INSTALL BUTTON
+   ========================================== */
+
+.install-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: var(--gold);
+    border: 2px solid var(--accent);
+    border-radius: var(--radius-lg);
+    color: var(--text-on-gold);
+    font-family: var(--font-arabic);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    box-shadow: var(--shadow);
+    margin-right: auto;
+}
+
+.install-btn:hover {
+    background: var(--accent-light);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-glow);
+}
+
+.install-btn:active {
+    transform: translateY(0);
+}
+
+.install-btn i {
+    font-size: 1rem;
+}
+
+.install-btn.hidden {
+    display: none !important;
+}
+
+/* Offline indicator */
+.offline-indicator {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: rgba(231, 76, 60, 0.95);
+    color: white;
+    text-align: center;
+    padding: 8px 16px;
+    font-size: 0.9rem;
+    z-index: 9999;
+    display: none;
+    animation: slideDown 0.3s ease;
+}
+
+.offline-indicator.show {
+    display: block;
+}
+
+@keyframes slideDown {
+    from {
+        transform: translateY(-100%);
+    }
+    to {
+        transform: translateY(0);
+    }
+}
+
+/* Update available notification */
+.update-notification {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--gold);
+    color: var(--text-on-gold);
+    padding: 12px 24px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    display: none;
+    align-items: center;
+    gap: 12px;
+    z-index: 1000;
+    animation: fadeInUp 0.3s ease;
+}
+
+.update-notification.show {
+    display: flex;
+}
+
+.update-notification button {
+    background: var(--primary-dark);
+    color: var(--text-light);
+    border: none;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: var(--font-arabic);
+    font-size: 0.85rem;
+}
+
+.update-notification button:hover {
+    background: var(--primary);
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+/* ==========================================
    RESPONSIVE DESIGN
    ========================================== */
 

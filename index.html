@@ -3,7 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0d3329">
+    <meta name="description" content="تطبيق إسلامي شامل - مواقيت الصلاة، القرآن الكريم، التسبيح، الأذكار">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="مِحراب">
     <title>Mehrab-مِحراب</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- PWA Icons -->
+    <link rel="icon" type="image/svg+xml" href="icons/icon-192x192.svg">
+    <link rel="icon" type="image/svg+xml" sizes="512x512" href="icons/icon-512x512.svg">
+    <link rel="apple-touch-icon" href="icons/icon-apple-touch.svg">
+    
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@300;400;600;700;800&family=Scheherazade+New:wght@400;700&display=swap" rel="stylesheet">
@@ -19,11 +35,15 @@
     <header class="header">
         <div class="container">
             <div class="logo">
-                <div class="logo-icon">
-                    <i class="fas fa-moon"></i>
-                </div>
-                <h1>Mehrab-مِحراب</h1>
+            <div class="logo-icon">
+                <i class="fas fa-moon"></i>
             </div>
+            <h1>Mehrab-مِحراب</h1>
+            <button id="installBtn" class="install-btn" style="display: none;">
+                <i class="fas fa-download"></i>
+                <span>تثبيت</span>
+            </button>
+        </div>
             <div class="date-time">
                 <div class="date" id="currentDate"></div>
                 <div class="time" id="currentTime"></div>
@@ -309,5 +329,20 @@
     </div>
 
     <script src="script.js"></script>
+    
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then((registration) => {
+                        console.log('SW registered:', registration.scope);
+                    })
+                    .catch((error) => {
+                        console.log('SW registration failed:', error);
+                    });
+            });
+        }
+    </script>
 </body>
 </html>

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Maskable icon: Safe zone is inner 80% with padding -->
+  <rect width="512" height="512" rx="86" fill="#d4af37"/>
+  <!-- Inner safe zone (80% = 409.6px centered) -->
+  <rect x="51.2" y="51.2" width="409.6" height="409.6" rx="69" fill="#0d3329"/>
+  <circle cx="256" cy="256" r="150" fill="none"/>
+  <path d="M256 120c68.484 0 124 55.516 124 124 0 68.484-55.516 124-124 124-18.036 0-35.11-3.614-50.064-10.32-41.304 10.32-77.454-20.652-77.454-61.954 0-41.308 36.124-72.28 77.454-61.954 7.477-3.353 16.014-5.16 25.032-5.16z" fill="#d4af37"/>
+  <circle cx="328" cy="180" r="12" fill="#d4af37"/>
+  <circle cx="360" cy="220" r="9" fill="#f4d03f"/>
+  <circle cx="348" cy="168" r="7" fill="#f4d03f"/>
+  <circle cx="368" cy="200" r="5" fill="#d4af37"/>
+</svg>
