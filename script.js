@@ -694,6 +694,9 @@ const CAIRO_COORDINATES = {
 };
 
 function initPrayerTimes() {
+    // Initialize location search
+    initLocationSearch();
+    
     // Setup refresh button
     document.getElementById('refreshLocation')?.addEventListener('click', detectLocation);
     document.getElementById('retryLocation')?.addEventListener('click', detectLocation);
@@ -900,6 +903,200 @@ function showLocationError(message) {
     safeSetDisplay('locationLoading', 'none');
     safeSetDisplay('locationInfo', 'none');
     safeSetDisplay('locationError', 'flex');
+}
+
+// ==========================================
+// LOCATION SEARCH (Geocoding with Nominatim)
+// ==========================================
+
+let locationSearchTimeout = null;
+
+function initLocationSearch() {
+    const searchBtn = document.getElementById('locationSearchBtn');
+    const closeBtn = document.getElementById('locationSearchClose');
+    const searchInput = document.getElementById('locationSearchInput');
+    
+    // Toggle search panel
+    searchBtn?.addEventListener('click', () => {
+        toggleLocationSearchPanel(true);
+        setTimeout(() => searchInput?.focus(), 100);
+    });
+    
+    // Close search panel
+    closeBtn?.addEventListener('click', () => {
+        toggleLocationSearchPanel(false);
+    });
+    
+    // Debounced search input
+    searchInput?.addEventListener('input', (e) => {
+        const query = e.target.value.trim();
+        
+        // Clear previous timeout
+        if (locationSearchTimeout) {
+            clearTimeout(locationSearchTimeout);
+        }
+        
+        // Clear results if input is empty
+        if (query.length < 2) {
+            document.getElementById('locationSearchResults').innerHTML = '';
+            return;
+        }
+        
+        // Debounce search (300ms delay)
+        locationSearchTimeout = setTimeout(() => {
+            searchLocations(query);
+        }, 300);
+    });
+    
+    // Close on Escape key
+    searchInput?.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            toggleLocationSearchPanel(false);
+        }
+    });
+}
+
+function toggleLocationSearchPanel(show) {
+    const panel = document.getElementById('locationSearchPanel');
+    const searchInput = document.getElementById('locationSearchInput');
+    
+    if (show) {
+        safeSetDisplay('locationSearchPanel', 'block');
+        if (searchInput) searchInput.value = '';
+        document.getElementById('locationSearchResults').innerHTML = '';
+    } else {
+        safeSetDisplay('locationSearchPanel', 'none');
+    }
+}
+
+async function searchLocations(query) {
+    const resultsContainer = document.getElementById('locationSearchResults');
+    
+    // Show loading state
+    resultsContainer.innerHTML = `
+        <div class="location-search-loading">
+            <i class="fas fa-spinner fa-spin"></i>
+            <span>جاري البحث...</span>
+        </div>
+    `;
+    
+    try {
+        // Use Nominatim API for geocoding (free, no API key)
+        const response = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&accept-language=ar`,
+            {
+                headers: {
+                    'Accept-Language': 'ar'
+                }
+            }
+        );
+        
+        const results = await response.json();
+        
+        if (results.length === 0) {
+            resultsContainer.innerHTML = `
+                <div class="location-search-no-results">
+                    <i class="fas fa-search"></i>
+                    <p>لم يتم العثور على نتائج</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Render results
+        resultsContainer.innerHTML = results.map(location => `
+            <div class="location-search-item" data-lat="${location.lat}" data-lon="${location.lon}" data-name="${getLocationDisplayName(location)}">
+                <i class="fas fa-map-marker-alt"></i>
+                <div class="location-search-item-info">
+                    <div class="location-search-item-name">${getLocationDisplayName(location)}</div>
+                    <div class="location-search-item-country">${getCountryName(location)}</div>
+                </div>
+            </div>
+        `).join('');
+        
+        // Add click handlers
+        resultsContainer.querySelectorAll('.location-search-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const lat = parseFloat(item.dataset.lat);
+                const lon = parseFloat(item.dataset.lon);
+                const name = item.dataset.name;
+                selectSearchedLocation(lat, lon, name);
+            });
+        });
+        
+    } catch (error) {
+        console.error('Location search error:', error);
+        resultsContainer.innerHTML = `
+            <div class="location-search-no-results">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>حدث خطأ في البحث</p>
+            </div>
+        `;
+    }
+}
+
+function getLocationDisplayName(location) {
+    // Try to get Arabic name first, fallback to English
+    if (location.display_name_ar) {
+        return location.display_name_ar;
+    }
+    
+    const parts = location.display_name.split(',');
+    // Return city/region + country
+    const city = location.address?.city || location.address?.town || location.address?.village || location.address?.state || parts[0] || '';
+    const country = location.address?.country || '';
+    
+    return city ? `${city}, ${country}` : parts.slice(0, 2).join(', ');
+}
+
+function getCountryName(location) {
+    if (location.address?.country_code === 'eg') return 'مصر';
+    if (location.address?.country_code === 'sa') return 'السعودية';
+    if (location.address?.country_code === 'ae') return 'الإمارات';
+    if (location.address?.country_code === 'qa') return 'قطر';
+    if (location.address?.country_code === 'kw') return 'الكويت';
+    if (location.address?.country_code === 'bh') return 'البحرين';
+    if (location.address?.country_code === 'om') return 'عُمان';
+    if (location.address?.country_code === 'jo') return 'الأردن';
+    if (location.address?.country_code === 'lb') return 'لبنان';
+    if (location.address?.country_code === 'sy') return 'سوريا';
+    if (location.address?.country_code === 'iq') return 'العراق';
+    if (location.address?.country_code === 'ma') return 'المغرب';
+    if (location.address?.country_code === 'dz') return 'الجزائر';
+    if (location.address?.country_code === 'tn') return 'تونس';
+    if (location.address?.country_code === 'ly') return 'ليبيا';
+    if (location.address?.country_code === 'sd') return 'السودان';
+    if (location.address?.country_code === 'ye') return 'اليمن';
+    if (location.address?.country_code === 'ps') return 'فلسطين';
+    if (location.address?.country_code === 'tr') return 'تركيا';
+    if (location.address?.country_code === 'gb') return 'المملكة المتحدة';
+    if (location.address?.country_code === 'us') return 'الولايات المتحدة';
+    if (location.address?.country_code === 'de') return 'ألمانيا';
+    if (location.address?.country_code === 'fr') return 'فرنسا';
+    
+    return location.address?.country || '';
+}
+
+function selectSearchedLocation(lat, lon, name) {
+    // Close search panel
+    toggleLocationSearchPanel(false);
+    
+    // Update app state
+    appState.location = { latitude: lat, longitude: lon };
+    appState.locationName = name;
+    
+    // Save to localStorage
+    saveLocationData(lat, lon, name);
+    
+    // Update UI
+    safeSetDisplay('locationLoading', 'none');
+    safeSetDisplay('locationInfo', 'flex');
+    safeSetText('locationName', name);
+    
+    // Fetch new prayer times
+    fetchPrayerTimes(lat, lon);
+    
+    showToast(`تم تحديد: ${name}`);
 }
 
 async function fetchPrayerTimes(lat, lon, isOffline = false) {

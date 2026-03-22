@@ -375,6 +375,122 @@ body {
     transition: color var(--transition-fast);
 }
 
+.location-search-btn {
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    padding: var(--space-xs);
+    transition: transform var(--transition-fast);
+}
+
+.location-search-btn:hover {
+    transform: scale(1.1);
+}
+
+/* Location Search Panel */
+.location-search-panel {
+    margin-top: var(--space-md);
+    background: var(--surface);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.location-search-wrapper {
+    display: flex;
+    align-items: center;
+    padding: var(--space-sm) var(--space-md);
+    gap: var(--space-sm);
+}
+
+.location-search-icon {
+    color: var(--text-muted);
+    font-size: 1rem;
+}
+
+.location-search-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-light);
+    font-family: var(--font-arabic);
+    font-size: 1rem;
+    padding: var(--space-sm);
+    outline: none;
+}
+
+.location-search-input::placeholder {
+    color: var(--text-muted);
+}
+
+.location-search-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: var(--space-xs);
+    transition: color var(--transition-fast);
+}
+
+.location-search-close:hover {
+    color: var(--text-light);
+}
+
+.location-search-results {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.location-search-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    cursor: pointer;
+    border-top: 1px solid var(--glass-border);
+    transition: background var(--transition-fast);
+}
+
+.location-search-item:hover {
+    background: var(--surface-light);
+}
+
+.location-search-item i {
+    color: var(--accent);
+    font-size: 1.2rem;
+}
+
+.location-search-item-info {
+    flex: 1;
+}
+
+.location-search-item-name {
+    color: var(--text-light);
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.location-search-item-country {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.location-search-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    padding: var(--space-lg);
+    color: var(--text-muted);
+}
+
+.location-search-no-results {
+    text-align: center;
+    padding: var(--space-lg);
+    color: var(--text-muted);
+}
+
 .retry-location:hover {
     color: var(--accent);
 }

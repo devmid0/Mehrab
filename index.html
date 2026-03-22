@@ -89,6 +89,9 @@
                             <div class="location-info" id="locationInfo" style="display:none;">
                                 <i class="fas fa-map-marker-alt"></i>
                                 <span id="locationName">---</span>
+                                <button class="location-search-btn" id="locationSearchBtn" title="بحث عن موقع">
+                                    <i class="fas fa-search"></i>
+                                </button>
                                 <button class="refresh-location" id="refreshLocation" title="تحديث الموقع">
                                     <i class="fas fa-sync-alt"></i>
                                 </button>
@@ -99,6 +102,25 @@
                                 <button class="retry-location" id="retryLocation">
                                     <i class="fas fa-redo"></i> إعادة المحاولة
                                 </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Location Search Panel -->
+                        <div class="location-search-panel" id="locationSearchPanel" style="display: none;">
+                            <div class="location-search-wrapper">
+                                <i class="fas fa-search location-search-icon"></i>
+                                <input type="text" 
+                                       id="locationSearchInput" 
+                                       class="location-search-input" 
+                                       placeholder="ابحث عن مدينة أو دولة..."
+                                       autocomplete="off"
+                                       spellcheck="false">
+                                <button class="location-search-close" id="locationSearchClose">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <div class="location-search-results" id="locationSearchResults">
+                                <!-- Search results will appear here -->
                             </div>
                         </div>
                     </div>
