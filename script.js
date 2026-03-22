@@ -1862,54 +1862,15 @@ function isOnline() {
     return navigator.onLine;
 }
 
-// Setup service worker update notification
+// Setup service worker update notification (backup - primary handling is in index.html)
+// This function is kept for additional setup if needed
 function setupUpdateNotification() {
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.ready.then((registration) => {
-            // Check for updates every hour
-            setInterval(() => {
-                registration.update();
-            }, 60 * 60 * 1000);
-            
-            // Listen for updates
-            registration.addEventListener('updatefound', () => {
-                const newWorker = registration.installing;
-                
-                newWorker.addEventListener('statechange', () => {
-                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                        // New version available
-                        showUpdateNotification();
-                    }
-                });
-            });
-        });
-        
-        // Listen for controller change (new SW activated)
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-            window.location.reload();
+            // Additional SW ready setup can go here
+            console.log('SW ready for updates');
         });
     }
-}
-
-// Show update notification
-function showUpdateNotification() {
-    let notification = document.getElementById('updateNotification');
-    if (!notification) {
-        notification = document.createElement('div');
-        notification.id = 'updateNotification';
-        notification.className = 'update-notification';
-        notification.innerHTML = `
-            <i class="fas fa-sync-alt"></i>
-            <span>يوجد تحديث جديد!</span>
-            <button id="updateBtn">تحديث</button>
-        `;
-        document.body.appendChild(notification);
-        
-        document.getElementById('updateBtn')?.addEventListener('click', () => {
-            window.location.reload();
-        });
-    }
-    notification.classList.add('show');
 }
 
 // Clear cache (for debugging/reset)

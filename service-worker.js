@@ -274,6 +274,50 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Handle messages from the main thread
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    console.log('[SW] Skip waiting requested');
+    self.skipWaiting();
+  }
+  
+  // Handle CLEAR_CACHE message
+  if (event.data && event.data.type === 'CLEAR_CACHE') {
+    console.log('[SW] Clearing cache on request');
+    event.waitUntil(
+      caches.keys().then((cacheNames) => {
+        return Promise.all(
+          cacheNames.map((cacheName) => caches.delete(cacheName))
+        );
+      }).then(() => {
+        console.log('[SW] All caches cleared');
+        return self.clients.matchAll();
+      }).then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({ type: 'CACHE_CLEARED' });
+        });
+      })
+    );
+  }
+  
+  // Handle CACHE_API message
+  if (event.data && event.data.type === 'CACHE_API') {
+    const url = event.data.url;
+    console.log('[SW] Caching API:', url);
+    event.waitUntil(
+      caches.open(DYNAMIC_CACHE).then((cache) => {
+        return cache.add(url).then(() => {
+          return self.clients.matchAll();
+        }).then((clients) => {
+          clients.forEach((client) => {
+            client.postMessage({ type: 'SURAH_CACHED', surah: url });
+          });
+        });
+      })
+    );
+  }
+});
+
 // Fetch event - serve from cache, fallback to network
 self.addEventListener('fetch', (event) => {
   const { request } = event;
