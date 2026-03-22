@@ -10,6 +10,13 @@ const QURAN_API_BASE = 'https://api.alquran.cloud/v1';
 const ADHAN_API_BASE = 'https://api.aladhan.com/v1';
 
 // ==========================================
+// LOCAL STORAGE KEYS
+// ==========================================
+
+const TASBIH_STORAGE_KEY = 'tasbihData'; // Dedicated storage for ALL tasbih data
+const ISLAMIC_APP_PROGRESS_KEY = 'islamicAppProgress';
+
+// ==========================================
 // APP STATE
 // ==========================================
 
@@ -18,6 +25,7 @@ let appState = {
     surahs: [],
     selectedSurah: null,
     currentSurahData: null,
+    quranViewMode: 'cards', // 'cards' for single ayahs, 'full' for full page
     
     // Prayer - Location & Times
     location: null,
@@ -217,6 +225,140 @@ function setupQuranEventListeners() {
             loadSurah(appState.selectedSurah);
         }
     });
+    
+    // View mode toggle - Cards (آيات مفردة)
+    safeAddEventListener('viewModeCards', 'click', function() {
+        setQuranViewMode('cards');
+    });
+    
+    // View mode toggle - Full Page (صفحة كاملة)
+    safeAddEventListener('viewModeFull', 'click', function() {
+        setQuranViewMode('full');
+    });
+}
+
+/**
+ * Set Quran view mode and update UI
+ * @param {string} mode - 'cards' or 'full'
+ */
+async function setQuranViewMode(mode) {
+    appState.quranViewMode = mode;
+    
+    // Update button states
+    const cardsBtn = document.getElementById('viewModeCards');
+    const fullBtn = document.getElementById('viewModeFull');
+    
+    if (cardsBtn && fullBtn) {
+        cardsBtn.classList.toggle('active', mode === 'cards');
+        fullBtn.classList.toggle('active', mode === 'full');
+    }
+    
+    // Update view visibility
+    const cardsView = document.getElementById('ayahsGrid');
+    const fullView = document.getElementById('ayahsFullPage');
+    
+    if (cardsView && fullView) {
+        if (mode === 'cards') {
+            cardsView.style.display = '';
+            fullView.style.display = 'none';
+        } else {
+            cardsView.style.display = 'none';
+            fullView.style.display = 'block';
+            
+            // If switching to full view, render it (will fetch data if needed)
+            await renderFullPageView();
+        }
+    }
+    
+    console.log('[Quran] View mode changed to:', mode);
+}
+
+/**
+ * Render full page (mushaf-style) view
+ * This is an async function that waits for data or fetches it if missing
+ * @param {object} [passedData] - Optional surah data passed directly (preferred)
+ */
+async function renderFullPageView(passedData) {
+    const container = document.getElementById('ayahsFullPage');
+    
+    console.log('[Quran] renderFullPageView called with data:', !!passedData);
+    
+    if (!container) {
+        console.error('[Quran] Full page container not found!');
+        return;
+    }
+    
+    // Show loading state in the container
+    container.innerHTML = '<p style="color:#333;padding:40px;text-align:center;font-size:1.2rem;">جاري تحميل الآيات...</p>';
+    container.style.display = 'block';
+    
+    // Use passed data if available, otherwise check state
+    let surahData = passedData || appState.currentSurahData;
+    const selectedSurah = appState.selectedSurah;
+    
+    // If no data, fetch it
+    if (!surahData || !surahData.ayahs) {
+        console.log('[Quran] No data available, fetching surah:', selectedSurah);
+        
+        if (!selectedSurah) {
+            container.innerHTML = '<p style="color:#333;padding:40px;text-align:center;">يرجى اختيار سورة أولاً</p>';
+            return;
+        }
+        
+        // Fetch the surah data
+        try {
+            const apiUrl = `${QURAN_API_BASE}/surah/${selectedSurah}/quran-uthmani`;
+            console.log('[Quran] Fetching from API:', apiUrl);
+            
+            const response = await fetch(apiUrl);
+            const data = await response.json();
+            
+            if (data.code === 200 && data.data) {
+                surahData = data.data;
+                appState.currentSurahData = surahData; // Store for next time
+                console.log('[Quran] Data fetched successfully:', surahData.name);
+            } else {
+                throw new Error('Invalid API response');
+            }
+        } catch (error) {
+            console.error('[Quran] Failed to fetch surah:', error);
+            container.innerHTML = '<p style="color:#c00;padding:40px;text-align:center;">حدث خطأ في تحميل السورة</p>';
+            return;
+        }
+    }
+    
+    // Now we have data, render it
+    console.log('[Quran] Rendering surah:', surahData.name, 'with', surahData.ayahs?.length, 'ayahs');
+    
+    const ayahs = surahData.ayahs || [];
+    const showBismillah = surahData.number !== 9;
+    
+    // Build ayahs HTML using a simple loop
+    let ayahsHtml = '';
+    for (let i = 0; i < ayahs.length; i++) {
+        const ayah = ayahs[i];
+        const isLastAyah = (i === ayahs.length - 1);
+        const endingClass = isLastAyah ? ' ending' : '';
+        
+        // Append each ayah text with its number
+        ayahsHtml += `<span class="ayah-inline${endingClass}">${ayah.text} <span class="ayah-inline-num">${ayah.numberInSurah}</span></span> `;
+    }
+    
+    // Build the full page HTML
+    const fullPageHtml = `
+        <div class="surah-title-page">
+            <h3>سورة ${surahData.name}</h3>
+            ${showBismillah ? `<div class="bismillah-page">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>` : ''}
+        </div>
+        <div class="safha-content">
+            ${ayahsHtml}
+        </div>
+    `;
+    
+    // Set the innerHTML
+    container.innerHTML = fullPageHtml;
+    
+    console.log('[Quran] Full page rendered with', ayahs.length, 'ayahs');
 }
 
 function filterSurahs(query) {
@@ -350,12 +492,30 @@ function displaySurah(surahData) {
     const bismillahContainer = safeGetElement('bismillahContainer');
     if (bismillahContainer) bismillahContainer.style.display = surahData.number === 9 ? 'none' : 'block';
     
-    // Display ayahs
-    displayAyahs(surahData.ayahs, surahData.number);
-    
     // Show ayahs container
     hideAllStates();
     safeSetDisplay('ayahsContainer', 'block');
+    
+    // Display ayahs based on current view mode
+    displayAyahs(surahData.ayahs, surahData.number);
+    
+    // Also prepare full page view (render based on current mode)
+    if (appState.quranViewMode === 'full') {
+        // Ensure full view is visible, cards is hidden
+        const cardsView = document.getElementById('ayahsGrid');
+        const fullView = document.getElementById('ayahsFullPage');
+        if (cardsView) cardsView.style.display = 'none';
+        if (fullView) fullView.style.display = 'block';
+        
+        // Render full page view with passed data directly
+        renderFullPageView(surahData);
+    } else {
+        // Ensure cards view is visible, full view is hidden
+        const cardsView = document.getElementById('ayahsGrid');
+        const fullView = document.getElementById('ayahsFullPage');
+        if (cardsView) cardsView.style.display = '';
+        if (fullView) fullView.style.display = 'none';
+    }
     
     showToast(`تم تحميل سورة ${surahData.name}`);
 }
@@ -1014,12 +1174,99 @@ function updateNextPrayerWithCountdown() {
 // TASBIH
 // ==========================================
 
+// ==========================================
+// TASBIH LOCAL STORAGE (Per-user, per-device)
+// ==========================================
+
+/**
+ * Save ALL tasbih data to localStorage atomically
+ * @param {number} count - Current tasbih count (0 to target)
+ * @param {number} total - Total all-time tasbih count
+ * @param {number} round - Completed rounds count
+ * @param {number} target - Current target (default 33)
+ * @param {number} currentDhikr - Current dhikr index (0-2)
+ */
+function saveTasbihData(count, total, round, target, currentDhikr) {
+    try {
+        const data = {
+            count: count,
+            total: total,
+            round: round,
+            target: target,
+            currentDhikr: currentDhikr,
+            savedAt: Date.now()
+        };
+        localStorage.setItem(TASBIH_STORAGE_KEY, JSON.stringify(data));
+        console.log('[Tasbih] Saved data:', data);
+    } catch (e) {
+        console.warn('[Tasbih] Could not save data:', e);
+    }
+}
+
+/**
+ * Load tasbih data from localStorage
+ * @returns {object|null} The saved data object, or null if not found/invalid
+ */
+function loadTasbihData() {
+    try {
+        const saved = localStorage.getItem(TASBIH_STORAGE_KEY);
+        if (saved) {
+            const data = JSON.parse(saved);
+            // Validate data structure
+            if (typeof data.count === 'number' && typeof data.total === 'number') {
+                console.log('[Tasbih] Loaded data:', data);
+                return data;
+            }
+        }
+    } catch (e) {
+        console.warn('[Tasbih] Could not load data:', e);
+    }
+    return null; // Return null for new users or invalid data
+}
+
+/**
+ * ATOMIC RESET: Clear ALL tasbih data from localStorage
+ * After this, count/total/round will all be 0
+ */
+function atomicTasbihReset() {
+    try {
+        // Remove the dedicated tasbih storage key
+        localStorage.removeItem(TASBIH_STORAGE_KEY);
+        console.log('[Tasbih] ATOMIC RESET - All tasbih data cleared');
+    } catch (e) {
+        console.warn('[Tasbih] Could not clear data:', e);
+    }
+}
+
 function initTasbih() {
     const tapBtn = document.getElementById('tapBtn');
     const tasbihCircle = document.getElementById('tasbihCircle');
     const resetBtn = document.getElementById('resetBtn');
     const targetBtn = document.getElementById('targetBtn');
     const targetOptions = document.querySelectorAll('.target-option');
+    
+    // Load tasbih data from localStorage on startup
+    // - New users: all values start at 0
+    // - After reset: all values are 0 (data was cleared)
+    // - Returning users: resume from saved state
+    const savedData = loadTasbihData();
+    
+    if (savedData) {
+        appState.tasbihCount = savedData.count || 0;
+        appState.tasbihTotal = savedData.total || 0;
+        appState.tasbihRound = savedData.round || 0;
+        appState.tasbihTarget = savedData.target || 33;
+        appState.currentDhikr = savedData.currentDhikr || 0;
+        console.log('[Tasbih] Resumed session with data:', savedData);
+    } else {
+        // New user or after reset - all values default to 0
+        appState.tasbihCount = 0;
+        appState.tasbihTotal = 0;
+        appState.tasbihRound = 0;
+        appState.tasbihTarget = 33;
+        appState.currentDhikr = 0;
+        console.log('[Tasbih] Starting fresh session');
+    }
     
     // Tap events
     tapBtn.addEventListener('click', incrementTasbih);
@@ -1033,7 +1280,7 @@ function initTasbih() {
         }
     });
     
-    // Reset
+    // Reset - ATOMIC RESET clears all data permanently
     resetBtn.addEventListener('click', resetTasbih);
     
     // Target selector
@@ -1052,7 +1299,14 @@ function initTasbih() {
             document.getElementById('tasbihTarget').textContent = target;
             document.getElementById('targetSelector').classList.remove('show');
             
-            saveProgress();
+            // Save updated tasbih data with new target
+            saveTasbihData(
+                appState.tasbihCount,
+                appState.tasbihTotal,
+                appState.tasbihRound,
+                appState.tasbihTarget,
+                appState.currentDhikr
+            );
         });
     });
     
@@ -1089,6 +1343,18 @@ function incrementTasbih() {
     }
     
     updateTasbihDisplay();
+    
+    // ATOMIC SAVE: Save ALL tasbih data to dedicated localStorage key
+    // This ensures complete state persistence per-user, per-device
+    saveTasbihData(
+        appState.tasbihCount,
+        appState.tasbihTotal,
+        appState.tasbihRound,
+        appState.tasbihTarget,
+        appState.currentDhikr
+    );
+    
+    // Also update general progress for azkar data
     saveProgress();
 }
 
@@ -1101,11 +1367,31 @@ function updateBeads() {
     });
 }
 
+/**
+ * ATOMIC RESET: Clears ALL tasbih data from localStorage
+ * - tasbihCount → 0
+ * - tasbihTotal → 0
+ * - tasbihRound → 0
+ * - Data is permanently cleared from localStorage
+ * - After page refresh, count will be 0 (no persistence)
+ */
 function resetTasbih() {
+    // ATOMIC RESET: Immediately remove ALL tasbih data from localStorage
+    atomicTasbihReset();
+    
+    // Reset ALL tasbih state to 0
     appState.tasbihCount = 0;
+    appState.tasbihTotal = 0;
+    appState.tasbihRound = 0;
+    appState.currentDhikr = 0;
+    
+    // Update UI - force display to show 0
     updateBeads();
     updateTasbihDisplay();
-    saveProgress();
+    
+    // Force immediate DOM update for totalCount
+    safeSetText('totalCount', '0');
+    safeSetText('roundCount', '0');
     
     showToast('تم إعادة التعيين');
 }

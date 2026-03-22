@@ -149,6 +149,21 @@
                     <div class="bismillah-container" id="bismillahContainer">
                         <span class="bismillah-text">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</span>
                     </div>
+                    
+                    <!-- View Mode Toggle -->
+                    <div class="view-mode-toggle">
+                        <span class="view-mode-label">عرض:</span>
+                        <div class="view-mode-buttons">
+                            <button class="view-mode-btn active" id="viewModeCards" data-mode="cards">
+                                <i class="fas fa-th-large"></i>
+                                <span>آيات مفردة</span>
+                            </button>
+                            <button class="view-mode-btn" id="viewModeFull" data-mode="full">
+                                <i class="fas fa-file-alt"></i>
+                                <span>صفحة كاملة</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
 
@@ -160,8 +175,14 @@
 
                 <!-- Ayahs Container -->
                 <div class="ayahs-container" id="ayahsContainer" style="display:none;">
+                    <!-- Cards View (single ayahs) -->
                     <div class="ayahs-grid" id="ayahsGrid">
                         <!-- Ayahs will be loaded here -->
+                    </div>
+                    
+                    <!-- Full Page View (mushaf-style) -->
+                    <div class="ayahs-full-page" id="ayahsFullPage">
+                        <!-- Full page paragraph will be rendered here -->
                     </div>
                 </div>
 

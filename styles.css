@@ -1834,6 +1834,249 @@ body {
     50% { opacity: 0.7; }
 }
 
+/* ==========================================
+   VIEW MODE TOGGLE
+   ========================================== */
+
+.view-mode-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin-top: var(--space-lg);
+    padding-top: var(--space-lg);
+    border-top: 1px solid var(--glass-border);
+    position: relative;
+    z-index: 1;
+}
+
+.view-mode-label {
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.view-mode-buttons {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.view-mode-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--surface);
+    border: 2px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    font-family: var(--font-arabic);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all var(--transition-base);
+}
+
+.view-mode-btn:hover {
+    background: var(--surface-light);
+    border-color: var(--accent);
+    color: var(--text-light);
+}
+
+.view-mode-btn.active {
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%);
+    border-color: var(--accent);
+    color: var(--primary-dark);
+    font-weight: 600;
+}
+
+.view-mode-btn i {
+    font-size: 1rem;
+}
+
+/* ==========================================
+   AYAH CARDS VIEW (Default)
+   ========================================== */
+
+.ayahs-container {
+    padding: var(--space-md) 0;
+}
+
+.ayahs-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-md);
+}
+
+.ayah-card {
+    background: var(--surface);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    transition: all var(--transition-base);
+}
+
+.ayah-card:hover {
+    background: var(--surface-light);
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+}
+
+.ayah-card .ayah-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: var(--gold);
+    border-radius: var(--radius-full);
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--primary-dark);
+    margin-bottom: var(--space-md);
+}
+
+.ayah-card .ayah-text {
+    font-family: var(--font-display);
+    font-size: 1.8rem;
+    line-height: 2.8;
+    text-align: justify;
+    color: var(--text-light);
+    direction: rtl;
+}
+
+/* ==========================================
+   FULL PAGE VIEW (Mushaf Style)
+   ========================================== */
+
+.ayahs-full-page {
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-xl);
+    padding: var(--space-2xl);
+    min-height: 400px;
+    width: 100%;
+    box-sizing: border-box;
+    backdrop-filter: blur(20px);
+    position: relative;
+    overflow: visible;
+    display: none; /* Hidden by default, shown via JS */
+}
+
+/* Paper texture effect */
+.ayahs-full-page::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 29px,
+            rgba(139, 119, 101, 0.05) 29px,
+            rgba(139, 119, 101, 0.05) 30px
+        );
+    pointer-events: none;
+    z-index: 0;
+}
+
+.ayahs-full-page .surah-title-page {
+    text-align: center;
+    margin-bottom: var(--space-xl);
+    position: relative;
+    z-index: 1;
+}
+
+.ayahs-full-page .surah-title-page h3 {
+    font-family: var(--font-display);
+    font-size: 2.5rem;
+    color: var(--gold) !important;
+    margin-bottom: var(--space-sm);
+    line-height: 1.8;
+    text-align: center;
+}
+
+.ayahs-full-page .surah-title-page .bismillah-page {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    color: rgba(255, 255, 255, 0.9) !important;
+    margin: var(--space-lg) 0;
+}
+
+.safha-content {
+    font-family: var(--font-display) !important;
+    font-size: 1.6rem !important;
+    line-height: 1.8 !important;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.9) !important;
+    direction: rtl;
+    position: relative;
+    z-index: 1;
+    padding: var(--space-lg) 0;
+}
+
+/* Ensure ayah text is always visible */
+.ayah-inline {
+    display: inline !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-family: var(--font-display) !important;
+}
+
+.ayah-inline-num {
+    font-size: 0.6em;
+    vertical-align: super;
+    color: var(--gold) !important;
+    background-color: rgba(255, 215, 0, 0.15);
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin: 0 8px;
+    font-weight: 700;
+    font-family: var(--font-arabic) !important;
+}
+
+/* Verse ending marker */
+.ayah-inline.ending::after {
+    content: ' ۝ ';
+    color: var(--gold) !important;
+    font-size: 1.1em;
+    vertical-align: middle;
+}
+@media (max-width: 768px) {
+    .view-mode-toggle {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-sm);
+    }
+    
+    .view-mode-buttons {
+        width: 100%;
+    }
+    
+    .view-mode-btn {
+        flex: 1;
+        justify-content: center;
+    }
+    
+    .ayahs-full-page {
+        padding: var(--space-lg);
+    }
+    
+    .ayahs-full-page .surah-title-page h3 {
+        font-size: 2rem;
+    }
+    
+    .ayahs-full-page .surah-title-page .bismillah-page {
+        font-size: 1.6rem;
+    }
+    
+    .safha-content {
+        font-size: 1.3rem;
+        line-height: 2.8;
+    }
+}
+
 /* Loading State */
 .loading-state {
     text-align: center;
