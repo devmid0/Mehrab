@@ -482,7 +482,7 @@ async function renderFullPageView(passedData) {
     // Build the full page HTML
     const fullPageHtml = `
         <div class="surah-title-page">
-            <h3>سورة ${surahData.name}</h3>
+            <h3>${surahData.name}</h3>
             ${showBismillah ? `<div class="bismillah-page">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>` : ''}
         </div>
         <div class="safha-content">
