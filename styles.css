@@ -2009,6 +2009,78 @@ body {
 }
 
 /* ==========================================
+   AUDIO CONTROLS
+   ========================================== */
+
+.audio-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    position: relative;
+    z-index: 1;
+}
+
+.reciter-select {
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass);
+    border: 2px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    color: var(--text-light);
+    font-family: var(--font-arabic);
+    font-size: 0.9rem;
+    cursor: pointer;
+    min-width: 140px;
+    transition: all var(--transition-base);
+}
+
+.reciter-select:hover,
+.reciter-select:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+
+.reciter-select option {
+    background: var(--primary-dark);
+    color: var(--text-light);
+    padding: var(--space-sm);
+}
+
+.audio-play-btn {
+    width: 44px;
+    height: 44px;
+    background: var(--gold);
+    border: 2px solid var(--accent);
+    border-radius: var(--radius-full);
+    color: var(--primary-dark);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-glow);
+}
+
+.audio-play-btn:hover {
+    background: var(--accent-light);
+    transform: scale(1.1);
+    box-shadow: 0 0 25px rgba(212, 175, 55, 0.5);
+}
+
+.audio-play-btn:active {
+    transform: scale(0.95);
+}
+
+.audio-play-btn.playing {
+    background: #e74c3c;
+    border-color: #c0392b;
+}
+
+.audio-play-btn.playing i {
+    font-size: 0.9rem;
+}
+
+/* ==========================================
    AYAH CARDS VIEW (Default)
    ========================================== */
 
@@ -2058,6 +2130,44 @@ body {
     text-align: justify;
     color: var(--text-light);
     direction: rtl;
+}
+
+/* Bookmark highlight - entire card */
+.ayah-card.bookmarked {
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.3) 0%, rgba(212, 175, 55, 0.25) 100%);
+    border: 2px solid #d4af37;
+    box-shadow: 0 0 20px rgba(212, 175, 55, 0.4);
+    position: relative;
+}
+
+/* Bookmark icon on card */
+.ayah-card.bookmarked::before {
+    content: '\f02e';
+    font-family: 'Font Awesome 5 Free';
+    font-weight: 900;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 1.2rem;
+    color: #d4af37;
+}
+
+/* Bookmark highlight - ayah text element */
+.ayah-text.bookmarked-ayah {
+    background: rgba(255, 215, 0, 0.3);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin: -8px -12px;
+}
+
+/* Bookmark flash animation */
+@keyframes bookmarkFlash {
+    0%, 100% { box-shadow: 0 0 20px rgba(212, 175, 55, 0.3); }
+    50% { box-shadow: 0 0 40px rgba(212, 175, 55, 0.8); }
+}
+
+.ayah-card.bookmark-flash {
+    animation: bookmarkFlash 0.5s ease-in-out 2;
 }
 
 /* ==========================================
@@ -2158,6 +2268,28 @@ body {
     color: var(--gold) !important;
     font-size: 1.1em;
     vertical-align: middle;
+}
+
+/* Bookmark highlight for full page view */
+.ayah-inline.bookmarked-ayah {
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.4) 0%, rgba(212, 175, 55, 0.35) 100%);
+    border-radius: 6px;
+    padding: 4px 8px;
+    margin: 0 4px;
+    box-shadow: 0 0 15px rgba(212, 175, 55, 0.4);
+    position: relative;
+}
+
+/* Bookmark indicator for full page view */
+.ayah-inline.bookmarked-ayah::before {
+    content: '\f02e';
+    font-family: 'Font Awesome 5 Free';
+    font-weight: 900;
+    position: absolute;
+    top: -8px;
+    right: -4px;
+    font-size: 0.7rem;
+    color: #d4af37;
 }
 @media (max-width: 768px) {
     .view-mode-toggle {
@@ -2434,5 +2566,413 @@ body {
     
     .ayah-text {
         font-size: 1.4rem;
+    }
+}
+
+/* ==========================================
+   TAFSIR MODAL - GLASSMORPHISM STYLE
+   ========================================== */
+
+/* Modal Overlay */
+#tafsirModal {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+#tafsirModal.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Glassmorphism Overlay Background */
+#tafsirModalOverlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+/* Modal Content Container */
+.tafsir-modal-content {
+    position: relative;
+    z-index: 1;
+    width: 90%;
+    max-width: 600px;
+    max-height: 85vh;
+    overflow: hidden;
+    
+    /* Glassmorphism Effect */
+    background: linear-gradient(135deg, rgba(13, 51, 41, 0.95) 0%, rgba(10, 31, 28, 0.98) 100%);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    
+    /* Border with gold tint */
+    border: 1px solid rgba(212, 175, 55, 0.3);
+    border-radius: 24px;
+    
+    /* Shadow */
+    box-shadow: 
+        0 25px 50px -12px rgba(0, 0, 0, 0.6),
+        0 0 40px rgba(212, 175, 55, 0.1) inset;
+    
+    /* Animation */
+    transform: scale(0.9) translateY(20px);
+    transition: transform 0.3s ease;
+}
+
+#tafsirModal.active .tafsir-modal-content {
+    transform: scale(1) translateY(0);
+}
+
+/* Modal Header */
+.tafsir-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+}
+
+.tafsir-modal-title {
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin: 0;
+}
+
+/* Close Button */
+.tafsir-modal-close {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(212, 175, 55, 0.1);
+    border: 1px solid rgba(212, 175, 55, 0.25);
+    border-radius: 50%;
+    color: var(--accent);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.tafsir-modal-close:hover {
+    background: rgba(212, 175, 55, 0.25);
+    transform: scale(1.1);
+}
+
+.tafsir-modal-close:active {
+    transform: scale(0.95);
+}
+
+/* Modal Body */
+.tafsir-modal-body {
+    padding: 24px;
+    overflow-y: auto;
+    max-height: calc(85vh - 80px);
+}
+
+/* Tafsir Text */
+.tafsir-text {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    line-height: 2.2;
+    text-align: justify;
+    color: rgba(255, 255, 255, 0.95);
+    direction: rtl;
+}
+
+/* Tafsir Loading */
+.tafsir-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    text-align: center;
+}
+
+.tafsir-spinner {
+    width: 50px;
+    height: 50px;
+    border: 3px solid rgba(212, 175, 55, 0.2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    margin-bottom: 16px;
+    animation: tafsir-spin 1s linear infinite;
+}
+
+@keyframes tafsir-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.tafsir-loading p {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    color: var(--text-muted);
+}
+
+/* Tafsir Error */
+.tafsir-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    text-align: center;
+}
+
+.tafsir-error i {
+    font-size: 3rem;
+    color: #e74c3c;
+    margin-bottom: 16px;
+}
+
+.tafsir-error p {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+}
+
+.tafsir-retry-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background: var(--gold);
+    border: none;
+    border-radius: var(--radius-md);
+    color: var(--primary-dark);
+    font-family: var(--font-arabic);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.tafsir-retry-btn:hover {
+    background: var(--accent-light);
+    transform: scale(1.05);
+}
+
+/* Ayah Number Clickable Indicator */
+.ayah-inline-num.tafsir-ayah {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.ayah-inline-num.tafsir-ayah:hover {
+    background-color: rgba(212, 175, 55, 0.4);
+    transform: scale(1.1);
+}
+
+/* Responsive Modal */
+@media (max-width: 768px) {
+    .tafsir-modal-content {
+        width: 95%;
+        max-height: 90vh;
+        border-radius: 20px;
+    }
+    
+    .tafsir-modal-header {
+        padding: 16px 20px;
+    }
+    
+    .tafsir-modal-title {
+        font-size: 1.2rem;
+    }
+    
+    .tafsir-modal-body {
+        padding: 20px;
+        max-height: calc(90vh - 70px);
+    }
+    
+    .tafsir-text {
+        font-size: 1.2rem;
+        line-height: 2;
+    }
+}
+
+@media (max-width: 480px) {
+    .tafsir-modal-title {
+        font-size: 1.1rem;
+    }
+    
+    .tafsir-text {
+        font-size: 1.1rem;
+    }
+}
+
+/* Custom scrollbar for modal */
+.tafsir-modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.tafsir-modal-body::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+}
+
+.tafsir-modal-body::-webkit-scrollbar-thumb {
+    background: rgba(212, 175, 55, 0.4);
+    border-radius: 3px;
+}
+
+.tafsir-modal-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(212, 175, 55, 0.6);
+}
+
+/* ==========================================
+   AYAH AUDIO BUTTON IN MODAL
+   ========================================== */
+
+.tafsir-modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.modal-reciter-select {
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(212, 175, 55, 0.5);
+    border-radius: 8px;
+    color: #fff;
+    font-family: var(--font-arabic);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    outline: none;
+    min-width: 100px;
+}
+
+.modal-reciter-select:hover {
+    border-color: #d4af37;
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.modal-reciter-select:focus {
+    border-color: #d4af37;
+    box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.2);
+}
+
+.modal-reciter-select option {
+    background: #1a3a2f;
+    color: #fff;
+    padding: 8px;
+}
+
+.ayah-audio-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #d4af37 0%, #f4d03f 50%, #d4af37 100%);
+    border: 2px solid #d4af37;
+    border-radius: 20px;
+    color: #0d3329;
+    font-family: var(--font-arabic);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(212, 175, 55, 0.3);
+}
+
+.ayah-audio-btn:hover {
+    background: linear-gradient(135deg, #f4d03f 0%, #ffe066 50%, #f4d03f 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(212, 175, 55, 0.5);
+}
+
+.ayah-audio-btn:active {
+    transform: translateY(0);
+}
+
+.ayah-audio-btn i {
+    font-size: 0.85rem;
+}
+
+.ayah-audio-btn.loading {
+    background: rgba(212, 175, 55, 0.3);
+    border-color: rgba(212, 175, 55, 0.5);
+    cursor: wait;
+}
+
+.ayah-audio-btn.loading i {
+    animation: spin 1s linear infinite;
+}
+
+.ayah-audio-btn.playing {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    border-color: #e74c3c;
+    color: white;
+}
+
+.ayah-audio-btn.playing:hover {
+    background: linear-gradient(135deg, #c0392b 0%, #a93226 100%);
+}
+
+/* Modal bookmark button */
+.modal-bookmark-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(212, 175, 55, 0.5);
+    border-radius: 50%;
+    color: #fff;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.modal-bookmark-btn:hover {
+    background: rgba(212, 175, 55, 0.2);
+    border-color: #d4af37;
+    color: #d4af37;
+}
+
+.modal-bookmark-btn.active {
+    background: linear-gradient(135deg, #d4af37 0%, #f4d03f 50%, #d4af37 100%);
+    border-color: #d4af37;
+    color: #0d3329;
+}
+
+.modal-bookmark-btn.active:hover {
+    background: linear-gradient(135deg, #f4d03f 0%, #ffe066 50%, #f4d03f 100%);
+}
+
+/* Responsive modal header */
+@media (max-width: 480px) {
+    .tafsir-modal-actions {
+        gap: 8px;
+    }
+    
+    .ayah-audio-btn {
+        padding: 6px 12px;
+        font-size: 0.8rem;
+    }
+    
+    .ayah-audio-btn span {
+        display: none;
+    }
+    
+    .ayah-audio-btn i {
+        font-size: 1rem;
     }
 }

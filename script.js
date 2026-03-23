@@ -8,6 +8,94 @@
 
 const QURAN_API_BASE = 'https://api.alquran.cloud/v1';
 const ADHAN_API_BASE = 'https://api.aladhan.com/v1';
+const TAFSIR_API_BASE = 'http://api.quran-tafseer.com/tafseer';
+
+// Available Tafsirs (IDs from api.quran-tafseer.com/tafseer)
+const TAFSIRS = {
+    AL_MUYASSAR: { id: 1, name: 'التفسير الميسر' },
+    IBN_KATHIR: { id: 4, name: 'تفسير ابن كثير' },
+    AL_JALALAYN: { id: 2, name: 'تفسير الجلالين' },
+    AL_SAADI: { id: 3, name: 'تفسير السعدي' }
+};
+
+// Default tafsir
+let currentTafsir = TAFSIRS.AL_MUYASSAR;
+
+// Quran Audio Reciters Configuration
+// Audio URL pattern: {server}{surah_number_padded_3digits}.mp3
+// Example: https://server6.mp3quran.net/minsh/001.mp3
+// Note: All servers use mp3quran.net - verified working with full surah MP3 files
+const reciters = {
+    'minshawi': { 
+        name: 'المنشاوي', 
+        server: 'https://server6.mp3quran.net/minsh/',
+        fallback: 'https://cdn.mp3quran.net/minsh/'
+    },
+    'abdulbasit': { 
+        name: 'عبدالباسط', 
+        server: 'https://server7.mp3quran.net/basit/',
+        fallback: 'https://server7.mp3quran.net/basit/',
+        type: 'murattal'
+    },
+    'yaser': { 
+        name: 'ياسر الدوسري', 
+        server: 'https://server11.mp3quran.net/yasser/',
+        fallback: 'https://server11.mp3quran.net/yasser/'
+    },
+    'hussary': { 
+        name: 'الحصري', 
+        server: 'https://server13.mp3quran.net/husr/',
+        fallback: 'https://server13.mp3quran.net/husr/',
+        type: 'murattal'
+    },
+    'afasy': { 
+        name: 'مشاري العفاسي', 
+        server: 'https://server8.mp3quran.net/afs/',
+        fallback: 'https://server8.mp3quran.net/afs/'
+    },
+    'shatri': { 
+        name: 'أبو بكر الشاطري', 
+        server: 'https://server11.mp3quran.net/shatri/',
+        fallback: 'https://server11.mp3quran.net/shatri/'
+    },
+    'hanirifai': { 
+        name: 'هاني الرفعي', 
+        server: 'https://server8.mp3quran.net/hani/',
+        fallback: 'https://server8.mp3quran.net/hani/'
+    }
+};
+
+// Audio State
+let audioState = {
+    currentReciter: 'minshawi',
+    isPlaying: false,
+    currentSurah: null
+};
+
+// Single global audio element - always use this one instance
+let globalAudio = null;
+
+// Initialize global audio element
+function initGlobalAudio() {
+    if (!globalAudio) {
+        globalAudio = new Audio();
+        
+        // Handle audio end
+        globalAudio.addEventListener('ended', function() {
+            audioState.isPlaying = false;
+            updateAudioButton(false);
+            showToast('انتهت السورة');
+        });
+        
+        // Handle errors
+        globalAudio.addEventListener('error', function(e) {
+            console.error('[Audio] Error:', e);
+            audioState.isPlaying = false;
+            updateAudioButton(false);
+        });
+    }
+    return globalAudio;
+}
 
 // ==========================================
 // LOCAL STORAGE KEYS
@@ -15,6 +103,7 @@ const ADHAN_API_BASE = 'https://api.aladhan.com/v1';
 
 const TASBIH_STORAGE_KEY = 'tasbihData'; // Dedicated storage for ALL tasbih data
 const ISLAMIC_APP_PROGRESS_KEY = 'islamicAppProgress';
+const BOOKMARK_STORAGE_KEY = 'quranBookmark'; // Single ayah bookmark
 
 // ==========================================
 // APP STATE
@@ -26,6 +115,7 @@ let appState = {
     selectedSurah: null,
     currentSurahData: null,
     quranViewMode: 'cards', // 'cards' for single ayahs, 'full' for full page
+    bookmark: null, // {surah: number, ayah: number} - only ONE bookmark allowed
     
     // Prayer - Location & Times
     location: null,
@@ -118,6 +208,12 @@ document.addEventListener('DOMContentLoaded', function() {
     initAzkar();
     initClock();
     initPWA();
+    initBookmark(); // Initialize bookmark system
+    initTafsirModal();
+    initAyahAudioButton();
+    
+    // Initialize global audio element
+    initGlobalAudio();
     
     loadProgress();
 });
@@ -235,6 +331,37 @@ function setupQuranEventListeners() {
     safeAddEventListener('viewModeFull', 'click', function() {
         setQuranViewMode('full');
     });
+    
+    // Audio controls
+    safeAddEventListener('reciterSelect', 'change', function(e) {
+        const selectedReciter = e.target.value;
+        audioState.currentReciter = selectedReciter;
+        
+        // Sync modal reciter dropdown if modal is open
+        const modalReciterSelect = document.getElementById('modalReciterSelect');
+        if (modalReciterSelect && ['minshawi', 'hussary', 'abdulbasit'].includes(selectedReciter)) {
+            modalReciterSelect.value = selectedReciter;
+        }
+        
+        // If playing, restart with new reciter
+        if (audioState.isPlaying && audioState.currentSurah) {
+            playSurahAudio(audioState.currentSurah);
+        }
+    });
+    
+    safeAddEventListener('audioPlayBtn', 'click', function() {
+        if (audioState.isPlaying) {
+            stopAudio();
+        } else {
+            // Get current selected surah
+            const surahNum = appState.selectedSurah;
+            if (surahNum) {
+                playSurahAudio(surahNum);
+            } else {
+                showToast('يرجى اختيار سورة أولاً');
+            }
+        }
+    });
 }
 
 /**
@@ -268,6 +395,10 @@ async function setQuranViewMode(mode) {
             // If switching to full view, render it (will fetch data if needed)
             await renderFullPageView();
         }
+        
+        // Ensure bookmark highlights are applied in both views when switching
+        updateBookmarkHighlight();
+        updateFullPageBookmarkHighlight();
     }
     
     console.log('[Quran] View mode changed to:', mode);
@@ -340,8 +471,12 @@ async function renderFullPageView(passedData) {
         const isLastAyah = (i === ayahs.length - 1);
         const endingClass = isLastAyah ? ' ending' : '';
         
-        // Append each ayah text with its number
-        ayahsHtml += `<span class="ayah-inline${endingClass}">${ayah.text} <span class="ayah-inline-num">${ayah.numberInSurah}</span></span> `;
+        // Check if this ayah is bookmarked (in full page view, surah is surahData.number)
+        const isBookmarkedAyah = isBookmarked(surahData.number, ayah.numberInSurah);
+        const bookmarkClass = isBookmarkedAyah ? ' bookmarked-ayah' : '';
+        
+        // Append each ayah text with its number - clickable for tafsir - with ID for bookmark scrolling
+        ayahsHtml += `<span id="ayah-${ayah.numberInSurah}" class="ayah-inline${endingClass}${bookmarkClass}">${ayah.text} <span class="ayah-inline-num tafsir-ayah" data-surah="${surahData.number}" data-ayah="${ayah.numberInSurah}">${ayah.numberInSurah}</span></span> `;
     }
     
     // Build the full page HTML
@@ -357,6 +492,16 @@ async function renderFullPageView(passedData) {
     
     // Set the innerHTML
     container.innerHTML = fullPageHtml;
+    
+    // Add click event delegation for tafsir
+    container.querySelectorAll('.tafsir-ayah').forEach(numSpan => {
+        numSpan.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const surahNum = parseInt(this.dataset.surah);
+            const ayahNum = parseInt(this.dataset.ayah);
+            showTafsirModal(surahNum, ayahNum);
+        });
+    });
     
     console.log('[Quran] Full page rendered with', ayahs.length, 'ayahs');
 }
@@ -385,6 +530,11 @@ function filterSurahs(query) {
 
 async function loadSurah(surahNumber) {
     appState.selectedSurah = surahNumber;
+    
+    // Stop any currently playing audio when loading new surah
+    if (audioState.isPlaying) {
+        stopAudio();
+    }
     
     // Show loading
     hideAllStates();
@@ -499,6 +649,9 @@ function displaySurah(surahData) {
     // Display ayahs based on current view mode
     displayAyahs(surahData.ayahs, surahData.number);
     
+    // Ensure bookmark highlight is applied after rendering
+    updateBookmarkHighlight();
+    
     // Also prepare full page view (render based on current mode)
     if (appState.quranViewMode === 'full') {
         // Ensure full view is visible, cards is hidden
@@ -527,11 +680,35 @@ function displayAyahs(ayahs, surahNumber) {
     ayahs.forEach((ayah, index) => {
         const card = document.createElement('div');
         card.className = 'ayah-card';
+        card.id = `ayah-${ayah.numberInSurah}`; // Unique ID for scrollIntoView
+        card.dataset.ayah = ayah.numberInSurah;
+        card.dataset.surah = surahNumber;
+        
+        // Check if this ayah is bookmarked
+        const isThisBookmarked = isBookmarked(surahNumber, ayah.numberInSurah);
+        if (isThisBookmarked) {
+            card.classList.add('bookmarked');
+        }
         
         card.innerHTML = `
             <div class="ayah-number">${ayah.numberInSurah}</div>
-            <div class="ayah-text">${ayah.text}</div>
+            <div class="ayah-text${isThisBookmarked ? ' bookmarked-ayah' : ''}">${ayah.text}</div>
         `;
+        
+        // Click to open tafsir
+        card.addEventListener('click', function() {
+            showTafsirModal(surahNumber, ayah.numberInSurah);
+        });
+        
+        // Right-click to toggle bookmark
+        card.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            if (isBookmarked(surahNumber, ayah.numberInSurah)) {
+                removeBookmark();
+            } else {
+                setBookmark(surahNumber, ayah.numberInSurah);
+            }
+        });
         
         container.appendChild(card);
     });
@@ -549,6 +726,700 @@ function showError(message) {
     safeSetText('errorMessage', message);
     safeSetDisplay('errorState', 'block');
     safeSetDisplay('surahInfoCard', 'none');
+}
+
+// ==========================================
+// AUDIO MODULE - Quran Audio Playback
+// ==========================================
+
+/**
+ * Play surah audio for the selected reciter
+ * @param {number} surahNumber - Surah number (1-114)
+ * @param {boolean} useFallback - Whether to use fallback server
+ */
+function playSurahAudio(surahNumber, useFallback = false) {
+    // IMMEDIATELY stop any currently playing audio
+    stopAudio();
+    
+    const reciter = reciters[audioState.currentReciter];
+    if (!reciter) {
+        showToast('القارئ غير متوفر');
+        return;
+    }
+    
+    // Format surah number to padded string (e.g., 1 -> "001")
+    const surahStr = String(surahNumber).padStart(3, '0');
+    const server = useFallback && reciter.fallback ? reciter.fallback : reciter.server;
+    const audioUrl = `${server}${surahStr}.mp3`;
+    
+    console.log('[Audio] Loading:', audioUrl, useFallback ? '(fallback)' : '');
+    
+    // Use the SINGLE global audio element
+    const audio = initGlobalAudio();
+    
+    // Force stop any ongoing playback and reset
+    audio.pause();
+    audio.currentTime = 0;
+    
+    // Set new source
+    audio.src = audioUrl;
+    audioState.currentSurah = surahNumber;
+    
+    // Show loading state - button shows "loading" (stop icon) while loading
+    updateAudioButton('loading');
+    showToast(`جاري تحميل صوت ${reciter.name}...`);
+    
+    // Handle successful load and play
+    audio.addEventListener('canplay', function onCanPlay() {
+        audio.removeEventListener('canplay', onCanPlay);
+        audio.play()
+            .then(() => {
+                audioState.isPlaying = true;
+                updateAudioButton(true);
+                showToast(`جاري تشغيل سورة ${appState.currentSurahData?.name || surahNumber}`);
+            })
+            .catch(err => {
+                console.error('[Audio] Play error:', err);
+                showToast('فشل في تشغيل الصوت');
+                audioState.isPlaying = false;
+                updateAudioButton(false);
+            });
+    });
+    
+    // Handle errors - try fallback if primary fails
+    audio.addEventListener('error', function onError(e) {
+        audio.removeEventListener('error', onError);
+        console.error('[Audio] Error loading audio:', e);
+        
+        if (!useFallback && reciter.fallback && reciter.fallback !== reciter.server) {
+            console.log('[Audio] Trying fallback server...');
+            // Small delay to allow cleanup
+            setTimeout(() => playSurahAudio(surahNumber, true), 100);
+        } else {
+            showToast('تعذر تحميل الصوت - جرب قارئ آخر');
+            audioState.isPlaying = false;
+            updateAudioButton(false);
+        }
+    });
+    
+    // Start loading
+    audio.load();
+}
+
+/**
+ * Stop and reset all audio - IMMEDIATELY kills any playing audio
+ */
+function stopAudio() {
+    // Use global audio element if exists
+    if (globalAudio) {
+        globalAudio.pause();
+        globalAudio.currentTime = 0;
+        globalAudio.src = ''; // Clear source to ensure no audio plays
+    }
+    
+    // Reset state
+    audioState.isPlaying = false;
+    audioState.currentSurah = null;
+    audioState.currentAyahNumber = null;
+    
+    // Update UI to show play icon (stopped state)
+    updateAudioButton(false);
+}
+
+/**
+ * Update play/stop button appearance based on actual audio state
+ * @param {boolean|string} state - true=playing, false=stopped, 'loading'=loading
+ */
+function updateAudioButton(state) {
+    const btn = document.getElementById('audioPlayBtn');
+    if (btn) {
+        const icon = btn.querySelector('i');
+        
+        if (state === 'loading') {
+            // Loading state - show spinner/loading icon
+            btn.classList.add('loading');
+            btn.classList.remove('playing');
+            icon.className = 'fas fa-spinner fa-spin';
+            btn.title = 'جاري التحميل...';
+        } else if (state === true) {
+            // Playing state - show stop icon
+            btn.classList.add('playing');
+            btn.classList.remove('loading');
+            icon.className = 'fas fa-stop';
+            btn.title = 'إيقاف';
+        } else {
+            // Stopped state - show play icon
+            btn.classList.remove('playing', 'loading');
+            icon.className = 'fas fa-play';
+            btn.title = 'تشغيل';
+        }
+    }
+}
+
+// ==========================================
+// SINGLE AYAH AUDIO - Islamic Network CDN with Fallback
+// ==========================================
+
+// Islamic Network edition identifiers for ayah-level audio
+// Verify these at: https://cdn.islamic.network/quran/info/by-ayah/info.txt
+const islamicNetworkEditions = {
+    'minshawi': 'ar.minshawi',           // Mahmoud Khalil Al-Minshawi (128kbps available)
+    'hussary': 'ar.husary',              // Mahmoud Khalil Al-Hussary (128kbps available)
+    'abdulbasit': 'ar.abdulbasitmurattal' // AbdulBasit AbdulSamad Murattal (64kbps only!)
+};
+
+// Islamic Network bitrate per edition (some editions only available at certain bitrates)
+const editionBitrates = {
+    'ar.abdulbasitmurattal': 64  // AbdulBasit only available at 64kbps, not 128kbps
+};
+
+// Default bitrate for Islamic Network CDN
+const DEFAULT_BITRATE = 128;
+
+// Backup: EveryAyah folder name mapping (used if Islamic Network fails)
+const everyAyahReciters = {
+    'abdulbasit': 'AbdulBasit',
+    'abdulbasit_murattal': 'AbdulBasit_Murattal',
+    'minshawi': 'Mishary_Rashid',
+    'minshawi_murattal': 'Mishary_Rashid',
+    'yaser': 'Yasser_Ad-Dussary',
+    'hussary': 'Hussary',
+    'hussary_murattal': 'Hussary_Murattal',
+    'afasy': 'Alafasy',
+    'shatri': 'Shatri',
+    'hanirifai': 'Hani_Rifai'
+};
+
+// Quran structure: Number of ayahs in each surah (1-114)
+const surahAyahCounts = [
+    7, 286, 200, 176, 120, 165, 206, 75, 129, 109, 123, 111, 43, 52, 99, 128, 111, 110,
+    98, 135, 112, 78, 118, 64, 77, 227, 93, 88, 69, 60, 34, 30, 73, 54, 45, 83, 182, 88,
+    75, 85, 60, 49, 62, 55, 78, 96, 29, 22, 24, 13, 14, 11, 11, 18, 12, 12, 30, 52, 52,
+    44, 28, 28, 20, 56, 40, 31, 50, 40, 46, 42, 29, 19, 36, 25, 22, 17, 19, 26, 30, 20,
+    15, 21, 11, 8, 8, 19, 5, 8, 8, 11, 11, 8, 3, 9, 5, 4, 7, 3, 6, 3, 5, 4, 5, 6
+];
+
+/**
+ * Convert surah:ayah to global ayah number (1-6236)
+ * @param {number} surahNumber - Surah number (1-114)
+ * @param {number} ayahNumber - Ayah number within surah
+ * @returns {number} Global ayah number
+ */
+function getGlobalAyahNumber(surahNumber, ayahNumber) {
+    let globalNum = 0;
+    for (let i = 0; i < surahNumber - 1; i++) {
+        globalNum += surahAyahCounts[i];
+    }
+    return globalNum + ayahNumber;
+}
+
+// Current ayah being displayed in modal
+let currentModalAyah = {
+    surah: null,
+    ayah: null
+};
+
+// Store ayah audio listeners at module scope so they can be removed
+let ayahAudioListeners = {
+    onCanPlay: null,
+    onError: null,
+    onEnded: null
+};
+
+/**
+ * Clean up ayah-specific audio listeners
+ */
+function cleanupAyahAudioListeners() {
+    if (globalAudio) {
+        if (ayahAudioListeners.onCanPlay) {
+            globalAudio.removeEventListener('canplay', ayahAudioListeners.onCanPlay);
+            ayahAudioListeners.onCanPlay = null;
+        }
+        if (ayahAudioListeners.onError) {
+            globalAudio.removeEventListener('error', ayahAudioListeners.onError);
+            ayahAudioListeners.onError = null;
+        }
+        if (ayahAudioListeners.onEnded) {
+            globalAudio.removeEventListener('ended', ayahAudioListeners.onEnded);
+            ayahAudioListeners.onEnded = null;
+        }
+    }
+}
+
+/**
+ * Play a single ayah audio with retry logic
+ * Primary: Islamic Network CDN
+ * Backup: EveryAyah
+ * @param {number} surahNumber - Surah number (1-114)
+ * @param {number} ayahNumber - Ayah number within the surah
+ * @param {number} retryCount - Current retry attempt (internal)
+ */
+function playAyahAudio(surahNumber, ayahNumber, retryCount = 0) {
+    // IMMEDIATELY clean up old listeners and stop audio
+    cleanupAyahAudioListeners();
+    stopAudio();
+    
+    const reciterKey = audioState.currentReciter;
+    const globalAyahNum = getGlobalAyahNumber(surahNumber, ayahNumber);
+    
+    // Update state
+    currentModalAyah.surah = surahNumber;
+    currentModalAyah.ayah = ayahNumber;
+    
+    // Mark this as ayah-level playback (use surah:ayah as unique identifier)
+    // This allows stop button to detect modal audio vs surah audio
+    audioState.currentSurah = `ayah:${surahNumber}:${ayahNumber}`;
+    audioState.currentAyahNumber = ayahNumber;
+    
+    // Get edition identifier
+    let edition = islamicNetworkEditions[reciterKey];
+    if (!edition) {
+        // Fallback to default if reciter not in Islamic Network editions
+        edition = 'ar.minshawi'; // Default to Al-Minshawi
+    }
+    
+    // Get bitrate for this edition (some only available at 64kbps)
+    const bitrate = editionBitrates[edition] || DEFAULT_BITRATE;
+    
+    // Determine which URL to try and max retries
+    const useEveryAyah = retryCount >= 3; // After 3 Islamic Network retries, try EveryAyah
+    const maxRetries = useEveryAyah ? 2 : 3; // 3 retries for Islamic Network, 2 for EveryAyah
+    
+    // Build URLs
+    let audioUrl;
+    if (useEveryAyah) {
+        const everyAyahReciter = everyAyahReciters[reciterKey] || 'AbdulBasit';
+        const surahStr = String(surahNumber).padStart(3, '0');
+        const ayahStr = String(ayahNumber).padStart(3, '0');
+        audioUrl = `https://everyayah.com/data/${everyAyahReciter}_128kbps/${surahStr}${ayahStr}.mp3`;
+        console.log(`[AyahAudio] Trying EveryAyah (backup): ${audioUrl}`);
+    } else {
+        audioUrl = `https://cdn.islamic.network/quran/audio/${bitrate}/${edition}/${globalAyahNum}.mp3`;
+        console.log(`[AyahAudio] Trying Islamic Network (${bitrate}kbps): ${audioUrl}`);
+    }
+    
+    // Show loading/retrying state
+    const audioBtn = document.getElementById('ayahAudioBtn');
+    if (audioBtn) {
+        audioBtn.classList.add('loading');
+        if (retryCount > 0) {
+            audioBtn.innerHTML = `<i class="fas fa-sync fa-spin"></i><span>إعادة ${retryCount}...</span>`;
+            showToast(`جاري إعادة المحاولة... (${retryCount}/${maxRetries})`);
+        } else {
+            audioBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>جاري...</span>';
+        }
+    }
+    
+    // Use global audio element
+    const audio = initGlobalAudio();
+    
+    // Force stop and reset
+    audio.pause();
+    audio.currentTime = 0;
+    
+    // Set new source
+    audio.src = audioUrl;
+    
+    // Handle successful load and play (store in module scope for cleanup)
+    ayahAudioListeners.onCanPlay = function() {
+        audio.removeEventListener('canplay', ayahAudioListeners.onCanPlay);
+        audio.play()
+            .then(() => {
+                audioState.isPlaying = true;
+                console.log('[AyahAudio] Playing ayah', ayahNumber, 'of surah', surahNumber);
+                
+                // Update button to show playing state
+                if (audioBtn) {
+                    audioBtn.classList.remove('loading');
+                    audioBtn.classList.add('playing');
+                    audioBtn.innerHTML = '<i class="fas fa-stop"></i><span>إيقاف</span>';
+                }
+            })
+            .catch(err => {
+                console.error('[AyahAudio] Play error:', err);
+                showToast('فشل في تشغيل صوت الآية');
+                resetAyahAudioButton();
+            });
+    };
+    audio.addEventListener('canplay', ayahAudioListeners.onCanPlay);
+    
+    // Handle errors with retry
+    ayahAudioListeners.onError = function(e) {
+        audio.removeEventListener('error', ayahAudioListeners.onError);
+        console.error(`[AyahAudio] Error (attempt ${retryCount + 1}):`, e);
+        
+        if (retryCount < maxRetries) {
+            // Exponential backoff: 500ms, 1000ms, 2000ms...
+            const delay = 500 * Math.pow(2, retryCount);
+            console.log(`[AyahAudio] Retrying in ${delay}ms...`);
+            setTimeout(() => {
+                playAyahAudio(surahNumber, ayahNumber, retryCount + 1);
+            }, delay);
+        } else {
+            // All retries exhausted
+            if (!useEveryAyah) {
+                // Try EveryAyah as final fallback
+                console.log('[AyahAudio] Islamic Network failed, trying EveryAyah...');
+                setTimeout(() => {
+                    playAyahAudio(surahNumber, ayahNumber, 3);
+                }, 100);
+            } else {
+                // Both sources failed
+                console.error('[AyahAudio] All sources failed');
+                showToast('تعذر تحميل الصوت - جرب قارئ آخر');
+                resetAyahAudioButton();
+            }
+        }
+    };
+    audio.addEventListener('error', ayahAudioListeners.onError);
+    
+    // Handle audio ended
+    ayahAudioListeners.onEnded = function() {
+        audio.removeEventListener('ended', ayahAudioListeners.onEnded);
+        audioState.isPlaying = false;
+        resetAyahAudioButton();
+        console.log('[AyahAudio] Finished playing ayah');
+    };
+    audio.addEventListener('ended', ayahAudioListeners.onEnded);
+    
+    // Start loading
+    audio.load();
+}
+
+/**
+ * Reset the ayah audio button to default state
+ */
+function resetAyahAudioButton() {
+    const audioBtn = document.getElementById('ayahAudioBtn');
+    if (audioBtn) {
+        audioBtn.classList.remove('loading', 'playing');
+        audioBtn.innerHTML = '<i class="fas fa-play"></i><span>تشغيل</span>';
+    }
+}
+
+/**
+ * Stop any playing ayah audio
+ */
+function stopAyahAudio() {
+    // Clean up listeners FIRST
+    cleanupAyahAudioListeners();
+    
+    if (globalAudio) {
+        globalAudio.pause();
+        globalAudio.currentTime = 0;
+        globalAudio.src = ''; // Clear source to stop immediately
+    }
+    audioState.isPlaying = false;
+    audioState.currentSurah = null;
+    audioState.currentAyahNumber = null;
+    resetAyahAudioButton();
+}
+
+/**
+ * Initialize ayah audio button event listener
+ * Uses onclick assignment (not addEventListener) to prevent stacking
+ */
+function initAyahAudioButton() {
+    const audioBtn = document.getElementById('ayahAudioBtn');
+    if (audioBtn) {
+        // Remove existing listener first (prevent stacking)
+        audioBtn.onclick = null;
+        
+        // Use onclick assignment for immediate response
+        audioBtn.onclick = function() {
+            if (!currentModalAyah.surah || !currentModalAyah.ayah) {
+                showToast('يرجى اختيار آية أولاً');
+                return;
+            }
+            
+            // Toggle play/stop - immediate execution
+            // Check if we're currently playing this specific ayah
+            const currentAyahKey = `ayah:${currentModalAyah.surah}:${currentModalAyah.ayah}`;
+            if (audioState.isPlaying && audioState.currentSurah === currentAyahKey) {
+                // IMMEDIATELY stop audio on first click
+                stopAyahAudio();
+            } else {
+                playAyahAudio(currentModalAyah.surah, currentModalAyah.ayah);
+            }
+        };
+    }
+}
+
+// ==========================================
+// TAFSIR MODULE - AL-MUYASSAR TAFSIR
+// ==========================================
+
+/**
+ * Fetch Tafsir for a specific ayah
+ * @param {number} tafsirId - Tafsir ID (1=Al-Muyassar, 2=Jalalayn, 3=Saadi, 4=Ibn Kathir)
+ * @param {number} surahNumber - Surah number (1-114)
+ * @param {number} ayahNumber - Ayah number within the surah
+ * @returns {Promise<string>} Tafsir text
+ */
+async function fetchTafsir(tafsirId, surahNumber, ayahNumber) {
+    const apiUrl = `${TAFSIR_API_BASE}/${tafsirId}/${surahNumber}/${ayahNumber}`;
+    
+    try {
+        const response = await fetch(apiUrl);
+        const data = await response.json();
+        
+        if (data.text) {
+            return data.text;
+        } else {
+            throw new Error('Invalid tafsir response');
+        }
+    } catch (error) {
+        console.error('Error fetching tafsir:', error);
+        throw error;
+    }
+}
+
+/**
+ * Show Tafsir modal with loading state
+ * @param {number} surahNumber - Surah number
+ * @param {number} ayahNumber - Ayah number within surah
+ */
+async function showTafsirModal(surahNumber, ayahNumber) {
+    const modal = document.getElementById('tafsirModal');
+    const modalContent = document.getElementById('tafsirContent');
+    const modalTitle = document.getElementById('tafsirModalTitle');
+    const modalReciterSelect = document.getElementById('modalReciterSelect');
+    const modalTafsirSelect = document.getElementById('modalTafsirSelect');
+    
+    if (!modal) {
+        console.error('Tafsir modal not found in DOM');
+        return;
+    }
+    
+    // Set current ayah for audio playback
+    currentModalAyah.surah = surahNumber;
+    currentModalAyah.ayah = ayahNumber;
+    
+    // Update bookmark button state
+    updateBookmarkModalButton();
+    
+    // Sync modal dropdown with global reciter selection
+    if (modalReciterSelect) {
+        // Only allow minshawi, hussary, abdulbasit in modal
+        let currentReciter = audioState.currentReciter;
+        if (!['minshawi', 'hussary', 'abdulbasit'].includes(currentReciter)) {
+            currentReciter = 'minshawi'; // Default to first option
+        }
+        modalReciterSelect.value = currentReciter;
+    }
+    
+    // Sync tafsir dropdown with current tafsir
+    if (modalTafsirSelect) {
+        modalTafsirSelect.value = String(currentTafsir.id);
+    }
+    
+    // Reset audio button state
+    resetAyahAudioButton();
+    
+    // Stop any playing audio
+    stopAudio();
+    
+    // Get current surah name
+    const surahName = appState.currentSurahData?.name || `سورة ${surahNumber}`;
+    
+    // Update title: "تفسير الآية [num] - [surah name]"
+    modalTitle.innerHTML = `تفسير الآية ${ayahNumber} - ${surahName}`;
+    
+    // Show loading state
+    modalContent.innerHTML = `
+        <div class="tafsir-loading">
+            <div class="tafsir-spinner"></div>
+            <p>جاري تحميل التفسير...</p>
+        </div>
+    `;
+    
+    // Show modal
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    
+    // Fetch tafsir with current selected tafsir
+    try {
+        const tafsirText = await fetchTafsir(currentTafsir.id, surahNumber, ayahNumber);
+        modalContent.innerHTML = `
+            <div class="tafsir-text">
+                ${tafsirText}
+            </div>
+        `;
+    } catch (error) {
+        modalContent.innerHTML = `
+            <div class="tafsir-error">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>تعذر تحميل التفسير. يرجى المحاولة مرة أخرى.</p>
+                <button class="tafsir-retry-btn" onclick="showTafsirModal(${surahNumber}, ${ayahNumber})">
+                    <i class="fas fa-redo"></i> إعادة المحاولة
+                </button>
+            </div>
+        `;
+    }
+}
+
+/**
+ * Close Tafsir modal
+ */
+function closeTafsirModal() {
+    const modal = document.getElementById('tafsirModal');
+    if (modal) {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+}
+
+/**
+ * Initialize Tafsir modal event listeners
+ */
+function initTafsirModal() {
+    const modal = document.getElementById('tafsirModal');
+    const closeBtn = document.getElementById('tafsirModalClose');
+    const overlay = document.getElementById('tafsirModalOverlay');
+    const modalReciterSelect = document.getElementById('modalReciterSelect');
+    const modalTafsirSelect = document.getElementById('modalTafsirSelect');
+    
+    // Close button click
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeTafsirModal);
+    }
+    
+    // Overlay click (close when clicking outside)
+    if (overlay) {
+        overlay.addEventListener('click', closeTafsirModal);
+    }
+    
+    // Modal reciter select - sync with global reciter
+    if (modalReciterSelect) {
+        modalReciterSelect.addEventListener('change', function(e) {
+            const selectedReciter = e.target.value;
+            
+            // Update audioState
+            audioState.currentReciter = selectedReciter;
+            
+            // Sync with global reciter dropdown
+            const globalReciterSelect = document.getElementById('reciterSelect');
+            if (globalReciterSelect) {
+                globalReciterSelect.value = selectedReciter;
+            }
+            
+            // Stop current audio if playing
+            if (audioState.isPlaying) {
+                stopAudio();
+                resetAyahAudioButton();
+            }
+            
+            console.log('[Modal] Reciter changed to:', selectedReciter);
+        });
+    }
+    
+    // Modal tafsir select - change tafsir immediately
+    if (modalTafsirSelect) {
+        modalTafsirSelect.addEventListener('change', async function(e) {
+            const selectedTafsirId = parseInt(e.target.value);
+            
+            // Update current tafsir
+            currentTafsir = Object.values(TAFSIRS).find(t => t.id === selectedTafsirId) || TAFSIRS.AL_MUYASSAR;
+            
+            // Get current ayah
+            const surah = currentModalAyah.surah;
+            const ayah = currentModalAyah.ayah;
+            
+            if (!surah || !ayah) {
+                showToast('يرجى اختيار آية أولاً');
+                return;
+            }
+            
+            // Show loading state
+            const modalContent = document.getElementById('tafsirContent');
+            if (modalContent) {
+                modalContent.innerHTML = `
+                    <div class="tafsir-loading">
+                        <div class="tafsir-spinner"></div>
+                        <p>جاري تحميل ${currentTafsir.name}...</p>
+                    </div>
+                `;
+            }
+            
+            // Fetch and display new tafsir
+            try {
+                const tafsirText = await fetchTafsir(currentTafsir.id, surah, ayah);
+                if (modalContent) {
+                    modalContent.innerHTML = `
+                        <div class="tafsir-text">
+                            ${tafsirText}
+                        </div>
+                    `;
+                }
+                showToast(`تم تحميل ${currentTafsir.name}`);
+            } catch (error) {
+                if (modalContent) {
+                    modalContent.innerHTML = `
+                        <div class="tafsir-error">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <p>تعذر تحميل التفسير. يرجى المحاولة مرة أخرى.</p>
+                            <button class="tafsir-retry-btn" onclick="reloadCurrentTafsir()">
+                                <i class="fas fa-redo"></i> إعادة المحاولة
+                            </button>
+                        </div>
+                    `;
+                }
+                showToast('فشل في تحميل التفسير');
+            }
+            
+            console.log('[Modal] Tafsir changed to:', currentTafsir.name);
+        });
+    }
+    
+    // Escape key to close
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal && modal.classList.contains('active')) {
+            closeTafsirModal();
+        }
+    });
+}
+
+/**
+ * Reload current tafsir (called from retry button)
+ */
+async function reloadCurrentTafsir() {
+    const surah = currentModalAyah.surah;
+    const ayah = currentModalAyah.ayah;
+    
+    if (!surah || !ayah) return;
+    
+    const modalContent = document.getElementById('tafsirContent');
+    if (modalContent) {
+        modalContent.innerHTML = `
+            <div class="tafsir-loading">
+                <div class="tafsir-spinner"></div>
+                <p>جاري تحميل ${currentTafsir.name}...</p>
+            </div>
+        `;
+    }
+    
+    try {
+        const tafsirText = await fetchTafsir(currentTafsir.id, surah, ayah);
+        if (modalContent) {
+            modalContent.innerHTML = `
+                <div class="tafsir-text">
+                    ${tafsirText}
+                </div>
+            `;
+        }
+    } catch (error) {
+        if (modalContent) {
+            modalContent.innerHTML = `
+                <div class="tafsir-error">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>تعذر تحميل التفسير. يرجى المحاولة مرة أخرى.</p>
+                    <button class="tafsir-retry-btn" onclick="reloadCurrentTafsir()">
+                        <i class="fas fa-redo"></i> إعادة المحاولة
+                    </button>
+                </div>
+            `;
+        }
+    }
 }
 
 // ==========================================
@@ -1433,6 +2304,262 @@ function atomicTasbihReset() {
     } catch (e) {
         console.warn('[Tasbih] Could not clear data:', e);
     }
+}
+
+// ==========================================
+// BOOKMARK MODULE - Single Ayah Bookmark
+// ==========================================
+
+/**
+ * Load bookmark from localStorage
+ */
+function loadBookmark() {
+    try {
+        const saved = localStorage.getItem(BOOKMARK_STORAGE_KEY);
+        if (saved) {
+            const bookmark = JSON.parse(saved);
+            if (bookmark && typeof bookmark.surah === 'number' && typeof bookmark.ayah === 'number') {
+                appState.bookmark = bookmark;
+                console.log('[Bookmark] Loaded bookmark:', bookmark);
+                return bookmark;
+            }
+        }
+    } catch (e) {
+        console.warn('[Bookmark] Could not load bookmark:', e);
+    }
+    appState.bookmark = null;
+    return null;
+}
+
+/**
+ * Save bookmark to localStorage
+ */
+function saveBookmark(bookmark) {
+    try {
+        if (bookmark) {
+            localStorage.setItem(BOOKMARK_STORAGE_KEY, JSON.stringify(bookmark));
+            appState.bookmark = bookmark;
+            console.log('[Bookmark] Saved bookmark:', bookmark);
+        } else {
+            localStorage.removeItem(BOOKMARK_STORAGE_KEY);
+            appState.bookmark = null;
+            console.log('[Bookmark] Bookmark cleared');
+        }
+    } catch (e) {
+        console.warn('[Bookmark] Could not save bookmark:', e);
+    }
+}
+
+/**
+ * Set bookmark to a specific ayah (only ONE bookmark allowed)
+ */
+function setBookmark(surahNumber, ayahNumber) {
+    const bookmark = { surah: surahNumber, ayah: ayahNumber };
+    saveBookmark(bookmark);
+    updateBookmarkHighlight();
+    updateFullPageBookmarkHighlight();
+    updateBookmarkButton();
+    updateBookmarkModalButton();
+    showToast(`تم حفظ الآية ${ayahNumber} كمرجعية`);
+}
+
+/**
+ * Remove current bookmark
+ */
+function removeBookmark() {
+    saveBookmark(null);
+    updateBookmarkHighlight();
+    updateFullPageBookmarkHighlight();
+    updateBookmarkButton();
+    updateBookmarkModalButton();
+    showToast('تم حذف المرجعية');
+}
+
+/**
+ * Toggle bookmark from modal button
+ */
+function toggleModalBookmark() {
+    const surah = currentModalAyah.surah;
+    const ayah = currentModalAyah.ayah;
+    
+    if (!surah || !ayah) {
+        showToast('يرجى اختيار آية أولاً');
+        return;
+    }
+    
+    if (isBookmarked(surah, ayah)) {
+        removeBookmark();
+    } else {
+        setBookmark(surah, ayah);
+    }
+    updateBookmarkModalButton();
+}
+
+/**
+ * Update bookmark button in modal to reflect current state
+ */
+function updateBookmarkModalButton() {
+    const btn = document.getElementById('modalBookmarkBtn');
+    if (!btn) return;
+    
+    const surah = currentModalAyah.surah;
+    const ayah = currentModalAyah.ayah;
+    const isCurrentlyBookmarked = isBookmarked(surah, ayah);
+    
+    if (isCurrentlyBookmarked) {
+        btn.classList.add('active');
+        btn.innerHTML = '<i class="fas fa-bookmark"></i>';
+        btn.title = 'حذف المرجعية';
+    } else {
+        btn.classList.remove('active');
+        btn.innerHTML = '<i class="far fa-bookmark"></i>';
+        btn.title = 'حفظ كمرجعية';
+    }
+}
+
+/**
+ * Check if a specific ayah is bookmarked
+ */
+function isBookmarked(surahNumber, ayahNumber) {
+    return appState.bookmark && 
+           appState.bookmark.surah === surahNumber && 
+           appState.bookmark.ayah === ayahNumber;
+}
+
+/**
+ * Update bookmark highlight on all ayah cards
+ */
+function updateBookmarkHighlight() {
+    // Remove all existing highlights
+    document.querySelectorAll('.ayah-card.bookmarked').forEach(card => {
+        card.classList.remove('bookmarked');
+        const textEl = card.querySelector('.ayah-text');
+        if (textEl) textEl.classList.remove('bookmarked-ayah');
+    });
+    
+    // Add highlight to bookmarked ayah if viewing the correct surah
+    if (appState.bookmark && appState.selectedSurah === appState.bookmark.surah) {
+        const ayahNumber = appState.bookmark.ayah;
+        const card = document.getElementById(`ayah-${ayahNumber}`);
+        if (card) {
+            card.classList.add('bookmarked');
+            const textEl = card.querySelector('.ayah-text');
+            if (textEl) textEl.classList.add('bookmarked-ayah');
+        }
+    }
+}
+
+/**
+ * Update bookmark highlight on full page view (safha-content)
+ * This function dynamically adds/removes bookmark styling without re-rendering
+ */
+function updateFullPageBookmarkHighlight() {
+    const fullPageContainer = document.getElementById('ayahsFullPage');
+    if (!fullPageContainer) return;
+    
+    // Remove all existing bookmark highlights in full page view
+    fullPageContainer.querySelectorAll('.ayah-inline.bookmarked-ayah').forEach(el => {
+        el.classList.remove('bookmarked-ayah');
+    });
+    
+    // Add highlight to bookmarked ayah if viewing the correct surah in full page mode
+    if (appState.bookmark && 
+        appState.selectedSurah === appState.bookmark.surah && 
+        appState.quranViewMode === 'full') {
+        
+        const ayahNumber = appState.bookmark.ayah;
+        // Find the ayah-inline element with matching data-ayah attribute
+        const ayahEl = fullPageContainer.querySelector(`.tafsir-ayah[data-ayah="${ayahNumber}"]`);
+        if (ayahEl) {
+            const parentSpan = ayahEl.parentElement;
+            if (parentSpan && parentSpan.classList.contains('ayah-inline')) {
+                parentSpan.classList.add('bookmarked-ayah');
+            }
+        }
+    }
+}
+
+/**
+ * Update bookmark button visibility/text
+ */
+function updateBookmarkButton() {
+    const btn = document.getElementById('goToBookmarkBtn');
+    if (btn) {
+        if (appState.bookmark) {
+            btn.style.display = '';
+            btn.innerHTML = '<i class="fas fa-bookmark"></i>';
+        } else {
+            btn.style.display = 'none';
+        }
+    }
+}
+
+/**
+ * Jump to bookmarked ayah
+ */
+function goToBookmark() {
+    // Load bookmark directly from localStorage to ensure we have latest
+    const savedBookmark = loadBookmarkFromStorage();
+    
+    if (!savedBookmark) {
+        showToast('لا توجد مرجعية محفوظة');
+        return;
+    }
+    
+    const { surah, ayah } = savedBookmark;
+    
+    // If different surah, show alert
+    if (appState.selectedSurah !== surah) {
+        const surahName = appState.surahs?.find(s => s.number === surah)?.name || `السورة ${surah}`;
+        if (confirm(`المرجعية في ${surahName} - آية ${ayah}\n\nاضغط موافق للانتقال إليها`)) {
+            loadSurah(surah).then(() => {
+                scrollToAyah(ayah);
+            });
+        }
+    } else {
+        scrollToAyah(ayah);
+    }
+}
+
+/**
+ * Load bookmark directly from localStorage (for immediate use)
+ */
+function loadBookmarkFromStorage() {
+    try {
+        const saved = localStorage.getItem(BOOKMARK_STORAGE_KEY);
+        if (saved) {
+            return JSON.parse(saved);
+        }
+    } catch (e) {
+        console.warn('[Bookmark] Could not load:', e);
+    }
+    return null;
+}
+
+/**
+ * Scroll to a specific ayah in the current view
+ */
+function scrollToAyah(ayahNumber) {
+    // Try to find the ayah element by ID directly
+    const ayahElement = document.getElementById(`ayah-${ayahNumber}`);
+    
+    if (ayahElement) {
+        // Use getElementById + scrollIntoView as specified
+        ayahElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Add highlight effect briefly
+        ayahElement.classList.add('bookmarked-ayah');
+        setTimeout(() => ayahElement.classList.remove('bookmarked-ayah'), 2000);
+    }
+}
+
+/**
+ * Initialize bookmark functionality
+ */
+function initBookmark() {
+    loadBookmark();
+    updateBookmarkButton();
+    updateBookmarkHighlight();
 }
 
 function initTasbih() {

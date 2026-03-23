@@ -172,6 +172,25 @@
                         <span class="bismillah-text">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</span>
                     </div>
                     
+                    <!-- Audio Player Controls -->
+                    <div class="audio-controls">
+                        <select id="reciterSelect" class="reciter-select">
+                            <option value="minshawi">المنشاوي</option>
+                            <option value="abdulbasit">عبدالباسط</option>
+                            <option value="yaser">ياسر الدوسري</option>
+                            <option value="hussary">الحصري</option>
+                            <option value="afasy">مشاري العفاسي</option>
+                            <option value="shatri">أبو بكر الشاطري</option>
+                            <option value="hanirifai">هاني الرفعي</option>
+                        </select>
+                        <button id="audioPlayBtn" class="audio-play-btn" title="تشغيل / إيقاف">
+                            <i class="fas fa-play"></i>
+                        </button>
+                        <button id="goToBookmarkBtn" class="audio-play-btn" style="display:none;" title="الانتقال للمرجعية" onclick="goToBookmark()">
+                            <i class="fas fa-bookmark"></i>
+                        </button>
+                    </div>
+                    
                     <!-- View Mode Toggle -->
                     <div class="view-mode-toggle">
                         <span class="view-mode-label">عرض:</span>
@@ -369,6 +388,42 @@
     <!-- Celebration Animation -->
     <div class="celebration" id="celebration">
         <div class="confetti"></div>
+    </div>
+
+    <!-- Tafsir Modal - AL-MUYASSAR with Audio -->
+    <div class="tafsir-modal" id="tafsirModal">
+        <div class="tafsir-modal-content">
+            <div class="tafsir-modal-header">
+                <h3 class="tafsir-modal-title" id="tafsirModalTitle">تفسير الآية</h3>
+                <div class="tafsir-modal-actions">
+                    <select id="modalReciterSelect" class="modal-reciter-select">
+                        <option value="minshawi">المنشاوي</option>
+                        <option value="hussary">الحصري</option>
+                        <option value="abdulbasit">عبدالباسط</option>
+                    </select>
+                    <select id="modalTafsirSelect" class="modal-reciter-select">
+                        <option value="1" selected>التفسير الميسر</option>
+                        <option value="4">تفسير ابن كثير</option>
+                        <option value="2">تفسير الجلالين</option>
+                        <option value="3">تفسير السعدي</option>
+                    </select>
+                    <button class="ayah-audio-btn" id="ayahAudioBtn" title="تشغيل هذه الآية">
+                        <i class="fas fa-play"></i>
+                        <span>تشغيل</span>
+                    </button>
+                    <button class="modal-bookmark-btn" id="modalBookmarkBtn" title="حفظ كمرجعية" onclick="toggleModalBookmark()">
+                        <i class="far fa-bookmark"></i>
+                    </button>
+                    <button class="tafsir-modal-close" id="tafsirModalClose" aria-label="إغلاق">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="tafsir-modal-body" id="tafsirContent">
+                <!-- Tafsir content will be loaded here -->
+            </div>
+        </div>
+        <div class="tafsir-modal-overlay" id="tafsirModalOverlay"></div>
     </div>
 
     <script src="script.js"></script>
