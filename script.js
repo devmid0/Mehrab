@@ -1,5 +1,6 @@
 /* ==========================================
    ISLAMIC WEB APP - MASTER JAVASCRIPT
+   v2.0 - Tafsir UI fixes & alquran.cloud API integration
    ========================================== */
 
 // ==========================================
