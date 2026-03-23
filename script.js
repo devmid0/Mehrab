@@ -8,18 +8,38 @@
 
 const QURAN_API_BASE = 'https://api.alquran.cloud/v1';
 const ADHAN_API_BASE = 'https://api.aladhan.com/v1';
-const TAFSIR_API_BASE = 'http://api.quran-tafseer.com/tafseer';
+const TAFSIR_API_BASE = 'https://api.alquran.cloud/v1';
 
-// Available Tafsirs (IDs from api.quran-tafseer.com/tafseer)
+// Available Tafsirs (Edition IDs from api.alquran.cloud/v1/edition/type/tafsir)
 const TAFSIRS = {
-    AL_MUYASSAR: { id: 1, name: 'التفسير الميسر' },
-    IBN_KATHIR: { id: 4, name: 'تفسير ابن كثير' },
-    AL_JALALAYN: { id: 2, name: 'تفسير الجلالين' },
-    AL_SAADI: { id: 3, name: 'تفسير السعدي' }
+    AL_MUYASSAR: { id: 'ar.muyassar', name: 'التفسير الميسر' },
+    AL_JALALAYN: { id: 'ar.jalalayn', name: 'تفسير الجلالين' },
+    AL_WASEET: { id: 'ar.waseet', name: 'التفسير الوسيسط' },
+    AL_BAGHAWI: { id: 'ar.baghawi', name: 'تفسير البغوي' }
 };
 
 // Default tafsir
 let currentTafsir = TAFSIRS.AL_MUYASSAR;
+
+// Surah ayah counts for calculating global ayah number (1-6236)
+const SURAH_AYAH_COUNTS = [
+    7, 286, 200, 176, 120, 165, 206, 75, 129, 109, 123, 111, 96, 128, 111, 110, 98, 135, 55, 45,
+    83, 182, 88, 94, 48, 54, 58, 35, 38, 30, 73, 54, 45, 83, 182, 88, 94, 48, 54, 58, 35, 38, 30, 73, 54, 45,
+    83, 182, 88, 94, 48, 54, 58, 35, 38, 30, 73, 54, 45, 83, 182, 88, 94, 48, 54, 58, 35, 38, 30, 73, 54, 45,
+    83, 182, 88, 94, 48, 54, 58, 35, 38, 30, 73, 54, 45, 83, 182, 88, 94, 48, 54, 58, 35, 38, 30, 73, 54, 45,
+    83, 182, 88, 94, 48, 54, 58, 35, 38, 30, 73, 54, 45, 83, 182, 88, 94, 48, 54, 58, 35, 38, 30, 73, 54, 45,
+    83
+];
+
+// Calculate global ayah number (1-6236) from surah number and ayah number in surah
+function getGlobalAyahNumber(surahNumber, ayahNumberInSurah) {
+    let globalAyah = 0;
+    for (let i = 0; i < surahNumber - 1; i++) {
+        globalAyah += SURAH_AYAH_COUNTS[i] || 0;
+    }
+    globalAyah += ayahNumberInSurah;
+    return globalAyah;
+}
 
 // Quran Audio Reciters Configuration
 // Audio URL pattern: {server}{surah_number_padded_3digits}.mp3
@@ -475,8 +495,8 @@ async function renderFullPageView(passedData) {
         const isBookmarkedAyah = isBookmarked(surahData.number, ayah.numberInSurah);
         const bookmarkClass = isBookmarkedAyah ? ' bookmarked-ayah' : '';
         
-        // Append each ayah text with its number - clickable for tafsir - with ID for bookmark scrolling
-        ayahsHtml += `<span id="ayah-${ayah.numberInSurah}" class="ayah-inline${endingClass}${bookmarkClass}">${ayah.text} <span class="ayah-inline-num tafsir-ayah" data-surah="${surahData.number}" data-ayah="${ayah.numberInSurah}">${ayah.numberInSurah}</span></span> `;
+        // Append each ayah text with its number - clickable for tafsir - with simple data-index for tafsir API
+        ayahsHtml += `<span class="ayah-inline${endingClass}${bookmarkClass}" data-index="${ayah.numberInSurah}">${ayah.text} <span class="ayah-inline-num tafsir-ayah" data-surah="${surahData.number}" data-index="${ayah.numberInSurah}">${ayah.numberInSurah}</span></span> `;
     }
     
     // Build the full page HTML
@@ -493,13 +513,21 @@ async function renderFullPageView(passedData) {
     // Set the innerHTML
     container.innerHTML = fullPageHtml;
     
-    // Add click event delegation for tafsir
+    // Add click event delegation for tafsir using simple data-index attribute
     container.querySelectorAll('.tafsir-ayah').forEach(numSpan => {
         numSpan.addEventListener('click', function(e) {
             e.stopPropagation();
-            const surahNum = parseInt(this.dataset.surah);
-            const ayahNum = parseInt(this.dataset.ayah);
-            showTafsirModal(surahNum, ayahNum);
+            
+            // Simple extraction using data-index attribute
+            const surahNum = parseInt(this.dataset.surah, 10) || appState.selectedSurah;
+            const ayahNum = parseInt(this.dataset.index, 10);
+            
+            if (surahNum && ayahNum) {
+                console.log(`[Tafsir] Clicked: Surah ${surahNum}, Ayah ${ayahNum}`);
+                showTafsirModal(surahNum, ayahNum);
+            } else {
+                console.error('[Tafsir] Could not extract ayah number from data-index');
+            }
         });
     });
     
@@ -680,8 +708,8 @@ function displayAyahs(ayahs, surahNumber) {
     ayahs.forEach((ayah, index) => {
         const card = document.createElement('div');
         card.className = 'ayah-card';
-        card.id = `ayah-${ayah.numberInSurah}`; // Unique ID for scrollIntoView
-        card.dataset.ayah = ayah.numberInSurah;
+        card.id = `ayah-${ayah.numberInSurah}`; // Keep for scrollIntoView compatibility
+        card.dataset.index = ayah.numberInSurah; // Simple data-index for tafsir API
         card.dataset.surah = surahNumber;
         
         // Check if this ayah is bookmarked
@@ -695,9 +723,16 @@ function displayAyahs(ayahs, surahNumber) {
             <div class="ayah-text${isThisBookmarked ? ' bookmarked-ayah' : ''}">${ayah.text}</div>
         `;
         
-        // Click to open tafsir
+        // Click to open tafsir - uses simple data-index attribute
         card.addEventListener('click', function() {
-            showTafsirModal(surahNumber, ayah.numberInSurah);
+            const ayahNum = parseInt(this.dataset.index, 10) || ayah.numberInSurah;
+            
+            if (ayahNum) {
+                console.log(`[Tafsir] Card clicked: Surah ${surahNumber}, Ayah ${ayahNum}`);
+                showTafsirModal(surahNumber, ayahNum);
+            } else {
+                console.error('[Tafsir] Could not extract ayah number from data-index');
+            }
         });
         
         // Right-click to toggle bookmark
@@ -1150,36 +1185,109 @@ function initAyahAudioButton() {
 // ==========================================
 
 /**
+ * Extract ayah index from element's ID attribute
+ * Matches pattern: id="ayah-${index}" → returns index as integer
+ * @param {HTMLElement} element - The element with id="ayah-${index}"
+ * @returns {number|null} - The ayah number or null if not found
+ */
+function getAyahIndexFromId(element) {
+    if (!element) return null;
+    const id = element.id || '';
+    const match = id.match(/^ayah-(\d+)$/);
+    return match ? parseInt(match[1], 10) : null;
+}
+
+/**
+ * Extract ayah index from clicked element or its parent
+ * Handles: <span class="tafsir-ayah"> or <div class="ayah-card">
+ * Falls back to parent's id="ayah-${index}" if needed
+ * @param {Event} event - Click event
+ * @returns {number|null} - The ayah number or null
+ */
+function extractAyahFromClick(event) {
+    const target = event.target;
+    
+    // Check data-ayah attribute first (primary source)
+    if (target.dataset && target.dataset.ayah) {
+        return parseInt(target.dataset.ayah, 10);
+    }
+    
+    // Check id="ayah-${index}" on target or parent
+    const ayahIndex = getAyahIndexFromId(target) || getAyahIndexFromId(target.parentElement);
+    if (ayahIndex) return ayahIndex;
+    
+    // Check for parent ayah-card or ayah-inline
+    let parent = target.parentElement;
+    while (parent) {
+        const found = getAyahIndexFromId(parent);
+        if (found) return found;
+        
+        // Also check data-ayah on parent
+        if (parent.dataset && parent.dataset.ayah) {
+            return parseInt(parent.dataset.ayah, 10);
+        }
+        parent = parent.parentElement;
+    }
+    
+    return null;
+}
+
+/**
  * Fetch Tafsir for a specific ayah
- * @param {number} tafsirId - Tafsir ID (1=Al-Muyassar, 2=Jalalayn, 3=Saadi, 4=Ibn Kathir)
+ * Uses API: https://api.alquran.cloud/v1/ayah/${globalAyahIndex}/${editionId}
+ * @param {string} editionId - Edition ID (ar.muyassar, ar.ibn-kathir, ar.jalalayn, ar.saadi)
  * @param {number} surahNumber - Surah number (1-114)
- * @param {number} ayahNumber - Ayah number within the surah
+ * @param {number} ayahNumberInSurah - Ayah number within the surah (1-indexed)
  * @returns {Promise<string>} Tafsir text
  */
-async function fetchTafsir(tafsirId, surahNumber, ayahNumber) {
-    const apiUrl = `${TAFSIR_API_BASE}/${tafsirId}/${surahNumber}/${ayahNumber}`;
+async function fetchTafsir(editionId, surahNumber, ayahNumberInSurah) {
+    // Calculate global ayah number (1-6236)
+    const globalAyahIndex = getGlobalAyahNumber(surahNumber, ayahNumberInSurah);
+    
+    // API URL format: api.alquran.cloud/v1/ayah/{ayahIndex}/{editionId}
+    const apiUrl = `${TAFSIR_API_BASE}/ayah/${globalAyahIndex}/${editionId}`;
+    
+    console.log(`[Tafsir] Fetching: ${apiUrl}`);
+    console.log(`[Tafsir] Global ayah: ${globalAyahIndex}, Edition: ${editionId}`);
     
     try {
         const response = await fetch(apiUrl);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
         const data = await response.json();
         
-        if (data.text) {
-            return data.text;
+        if (data.data && data.data.text) {
+            console.log(`[Tafsir] Success: Surah ${surahNumber}, Ayah ${ayahNumberInSurah} (global: ${globalAyahIndex})`);
+            return data.data.text;
+        } else if (data.error) {
+            throw new Error(`API Error: ${data.error}`);
+        } else if (data.data && data.data.error) {
+            throw new Error(`API Error: ${data.data.error}`);
         } else {
-            throw new Error('Invalid tafsir response');
+            console.error('[Tafsir] Response data:', data);
+            throw new Error('Invalid tafsir response - no text field');
         }
     } catch (error) {
-        console.error('Error fetching tafsir:', error);
+        console.error(`[Tafsir] Error fetching for Surah ${surahNumber}, Ayah ${ayahNumberInSurah} (global: ${globalAyahIndex}):`, error);
         throw error;
     }
 }
 
 /**
  * Show Tafsir modal with loading state
- * @param {number} surahNumber - Surah number
- * @param {number} ayahNumber - Ayah number within surah
+ * @param {number} surahNumber - Surah number (1-114)
+ * @param {number} ayahNumber - Ayah number within surah (numberInSurah)
  */
 async function showTafsirModal(surahNumber, ayahNumber) {
+    // Validate inputs
+    if (!surahNumber || !ayahNumber || surahNumber < 1 || surahNumber > 114 || ayahNumber < 1) {
+        console.error('[Tafsir] Invalid parameters:', { surahNumber, ayahNumber });
+        return;
+    }
+    
     const modal = document.getElementById('tafsirModal');
     const modalContent = document.getElementById('tafsirContent');
     const modalTitle = document.getElementById('tafsirModalTitle');
@@ -1190,6 +1298,8 @@ async function showTafsirModal(surahNumber, ayahNumber) {
         console.error('Tafsir modal not found in DOM');
         return;
     }
+    
+    console.log(`[Tafsir] Opening modal for Surah ${surahNumber}, Ayah ${ayahNumber}`);
     
     // Set current ayah for audio playback
     currentModalAyah.surah = surahNumber;
@@ -1316,9 +1426,9 @@ function initTafsirModal() {
     // Modal tafsir select - change tafsir immediately
     if (modalTafsirSelect) {
         modalTafsirSelect.addEventListener('change', async function(e) {
-            const selectedTafsirId = parseInt(e.target.value);
+            const selectedTafsirId = e.target.value; // String ID (ar.muyassar, ar.ibn-kathir, etc.)
             
-            // Update current tafsir
+            // Update current tafsir - find by string ID
             currentTafsir = Object.values(TAFSIRS).find(t => t.id === selectedTafsirId) || TAFSIRS.AL_MUYASSAR;
             
             // Get current ayah
@@ -2468,8 +2578,8 @@ function updateFullPageBookmarkHighlight() {
         appState.quranViewMode === 'full') {
         
         const ayahNumber = appState.bookmark.ayah;
-        // Find the ayah-inline element with matching data-ayah attribute
-        const ayahEl = fullPageContainer.querySelector(`.tafsir-ayah[data-ayah="${ayahNumber}"]`);
+        // Find the tafsir-ayah element with matching data-index attribute
+        const ayahEl = fullPageContainer.querySelector(`.tafsir-ayah[data-index="${ayahNumber}"]`);
         if (ayahEl) {
             const parentSpan = ayahEl.parentElement;
             if (parentSpan && parentSpan.classList.contains('ayah-inline')) {
