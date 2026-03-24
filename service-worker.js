@@ -37,6 +37,10 @@ const SURAH_LIST_URL = `${QURAN_API_BASE}/surah`;
 self.addEventListener('install', (event) => {
   console.log('[SW] Installing service worker...');
   
+  // Immediately skip waiting to take control of all clients
+  // Don't wait for cache operations - do them in background
+  self.skipWaiting();
+  
   event.waitUntil(
     Promise.all([
       // Cache static assets
@@ -66,8 +70,7 @@ self.addEventListener('install', (event) => {
         console.log('[SW] Background Quran cache error:', err);
       })
     ]).then(() => {
-      console.log('[SW] Skip waiting');
-      return self.skipWaiting();
+      console.log('[SW] Service worker install complete');
     })
   );
 });
@@ -251,7 +254,7 @@ async function notifyClients(message) {
   }
 }
 
-// Activate event - clean up old caches
+// Activate event - clean up old caches and take immediate control
 self.addEventListener('activate', (event) => {
   console.log('[SW] Activating service worker...');
   
@@ -268,7 +271,7 @@ self.addEventListener('activate', (event) => {
         })
       );
     }).then(() => {
-      console.log('[SW] Claiming clients');
+      console.log('[SW] Claiming all clients immediately');
       return self.clients.claim();
     })
   );

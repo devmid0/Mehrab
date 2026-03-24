@@ -1,7 +1,46 @@
 /* ==========================================
    ISLAMIC WEB APP - MASTER JAVASCRIPT
-   v2.0 - Tafsir UI fixes & alquran.cloud API integration
+   v3.0 - Version check with cache invalidation
    ========================================== */
+
+// ==========================================
+// VERSION CHECK & CACHE INVALIDATION
+// ==========================================
+
+const APP_VERSION = '3.0';
+
+window.onload = async function() {
+    const storedVersion = localStorage.getItem('app_Version');
+    
+    if (storedVersion !== APP_VERSION) {
+        console.log('[Version] App version mismatch. Stored:', storedVersion, 'Required:', APP_VERSION);
+        
+        // Delete all caches
+        if ('caches' in window) {
+            try {
+                const cacheNames = await caches.keys();
+                await Promise.all(
+                    cacheNames.map(cacheName => {
+                        console.log('[Cache] Deleting:', cacheName);
+                        return caches.delete(cacheName);
+                    })
+                );
+                console.log('[Cache] All caches deleted');
+            } catch (err) {
+                console.error('[Cache] Error clearing caches:', err);
+            }
+        }
+        
+        // Set new version
+        localStorage.setItem('app_Version', APP_VERSION);
+        
+        // Reload to get fresh content
+        location.reload(true);
+        return;
+    }
+    
+    console.log('[Version] App version is current:', APP_VERSION);
+};
 
 // ==========================================
 // CONFIGURATION
