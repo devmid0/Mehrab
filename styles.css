@@ -2605,8 +2605,8 @@ body {
     position: relative;
     z-index: 1;
     width: 90%;
-    max-width: 600px;
-    max-height: 85vh;
+    max-width: 700px;
+    max-height: 90vh;
     overflow: hidden;
     
     /* Glassmorphism Effect */
@@ -2632,13 +2632,15 @@ body {
     transform: scale(1) translateY(0);
 }
 
-/* Modal Header */
+/* Modal Header - Desktop default */
 .tafsir-modal-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 20px 24px;
     border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+    gap: 15px;
+    flex-wrap: wrap;
 }
 
 .tafsir-modal-title {
@@ -2647,6 +2649,25 @@ body {
     font-weight: 700;
     color: var(--accent);
     margin: 0;
+    flex: 1;
+    min-width: 200px;
+}
+
+/* Mobile Responsive - Header becomes column */
+@media (max-width: 600px) {
+    .tafsir-modal-header {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        padding: 16px;
+    }
+    
+    .tafsir-modal-title {
+        font-size: 1.25rem;
+        text-align: center;
+        margin-bottom: 4px;
+    }
 }
 
 /* Close Button */
@@ -2674,21 +2695,46 @@ body {
     transform: scale(0.95);
 }
 
-/* Modal Body */
+/* Modal Body - Full height for long Tafsir content */
 .tafsir-modal-body {
     padding: 24px;
     overflow-y: auto;
-    max-height: calc(85vh - 80px);
+    max-height: calc(90vh - 120px);
+    scroll-behavior: smooth;
 }
 
-/* Tafsir Text */
+/* Scrollbar styling for better visibility */
+.tafsir-modal-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.tafsir-modal-body::-webkit-scrollbar-track {
+    background: rgba(212, 175, 55, 0.1);
+    border-radius: 4px;
+}
+
+.tafsir-modal-body::-webkit-scrollbar-thumb {
+    background: rgba(212, 175, 55, 0.4);
+    border-radius: 4px;
+}
+
+.tafsir-modal-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(212, 175, 55, 0.6);
+}
+
+/* Tafsir Text - Full display for detailed interpretations */
 .tafsir-text {
     font-family: var(--font-display);
-    font-size: 1.3rem;
-    line-height: 2.2;
+    font-size: 1.25rem;
+    line-height: 2.4;
     text-align: justify;
+    text-justify: inter-word;
     color: rgba(255, 255, 255, 0.95);
     direction: rtl;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    max-width: 100%;
 }
 
 /* Tafsir Loading */
@@ -2814,25 +2860,6 @@ body {
     }
 }
 
-/* Custom scrollbar for modal */
-.tafsir-modal-body::-webkit-scrollbar {
-    width: 6px;
-}
-
-.tafsir-modal-body::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 3px;
-}
-
-.tafsir-modal-body::-webkit-scrollbar-thumb {
-    background: rgba(212, 175, 55, 0.4);
-    border-radius: 3px;
-}
-
-.tafsir-modal-body::-webkit-scrollbar-thumb:hover {
-    background: rgba(212, 175, 55, 0.6);
-}
-
 /* ==========================================
    AYAH AUDIO BUTTON IN MODAL
    ========================================== */
@@ -2841,20 +2868,25 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
 }
 
+/* Dropdown styling - increased size for readability */
 .modal-reciter-select {
-    padding: 8px 12px;
+    padding: 10px 14px;
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(212, 175, 55, 0.5);
     border-radius: 8px;
     color: #fff;
     font-family: var(--font-arabic);
-    font-size: 0.85rem;
+    font-size: 0.95rem;
     cursor: pointer;
     transition: all 0.3s ease;
     outline: none;
-    min-width: 100px;
+    min-width: 120px;
+    flex: 1;
+    max-width: 180px;
 }
 
 .modal-reciter-select:hover {
@@ -2870,7 +2902,46 @@ body {
 .modal-reciter-select option {
     background: #1a3a2f;
     color: #fff;
-    padding: 8px;
+    padding: 10px;
+    font-size: 0.95rem;
+}
+
+/* Mobile Responsive - Full width dropdowns */
+@media (max-width: 600px) {
+    .tafsir-modal-actions {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        gap: 10px;
+    }
+    
+    .modal-reciter-select {
+        width: 100%;
+        max-width: 100%;
+        padding: 12px 16px;
+        font-size: 1rem;
+        text-align: center;
+    }
+    
+    /* Audio button - full width and centered on mobile */
+    .ayah-audio-btn {
+        width: 100%;
+        justify-content: center;
+        padding: 12px 20px;
+        font-size: 1rem;
+        margin-top: 4px;
+    }
+    
+    /* Modal body - increased padding for readability */
+    .tafsir-modal-body {
+        padding: 20px 16px;
+    }
+    
+    /* Tafsir text - increased font size */
+    .tafsir-text {
+        font-size: 1.1rem;
+        line-height: 2.2;
+    }
 }
 
 .ayah-audio-btn {

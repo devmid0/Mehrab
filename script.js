@@ -10,17 +10,31 @@
 const QURAN_API_BASE = 'https://api.alquran.cloud/v1';
 const ADHAN_API_BASE = 'https://api.aladhan.com/v1';
 const TAFSIR_API_BASE = 'https://api.alquran.cloud/v1';
+const TAFSIR_API_V2_BASE = 'https://quranapi.pages.dev/api'; // Alternative API with Ibn Kathir
 
-// Available Tafsirs (Edition IDs from api.alquran.cloud/v1/edition/type/tafsir)
+// Tafsir API routing - some tafsirs only available on specific APIs
+const TAFSIR_API_ROUTE = {
+    'ar.ibn-kathir': 'quranapi',  // Ibn Kathir only on quranapi.pages.dev
+    'ar.baghawi': 'alquran',      // Al-Baghawi on alquran.cloud
+    'ar.muyassar': 'alquran'      // Al-Muyassar on alquran.cloud
+};
+
+// Available Tafsirs - using quranapi.pages.dev for Ibn Kathir
 const TAFSIRS = {
-    AL_MUYASSAR: { id: 'ar.muyassar', name: 'التفسير الميسر' },
-    AL_JALALAYN: { id: 'ar.jalalayn', name: 'تفسير الجلالين' },
-    AL_WASEET: { id: 'ar.waseet', name: 'التفسير الوسيسط' },
-    AL_BAGHAWI: { id: 'ar.baghawi', name: 'تفسير البغوي' }
+    IBN_KATHIR: { id: 'ar.ibn-kathir', name: 'ابن كثير', api: 'quranapi' },
+    AL_BAGHAWI: { id: 'ar.baghawi', name: 'البغوي', api: 'alquran' },
+    AL_MUYASSAR: { id: 'ar.muyassar', name: 'الميسر', api: 'alquran' }
 };
 
 // Default tafsir
-let currentTafsir = TAFSIRS.AL_MUYASSAR;
+let currentTafsir = TAFSIRS.IBN_KATHIR;
+
+// Lookup object for finding tafsir by API ID (for dropdown synchronization)
+const TAFSIR_BY_ID = {
+    'ar.ibn-kathir': TAFSIRS.IBN_KATHIR,
+    'ar.baghawi': TAFSIRS.AL_BAGHAWI,
+    'ar.muyassar': TAFSIRS.AL_MUYASSAR
+};
 
 // Surah ayah counts for calculating global ayah number (1-6236)
 const SURAH_AYAH_COUNTS = [
@@ -243,6 +257,93 @@ document.addEventListener('DOMContentLoaded', function() {
 // QURAN MODULE - Al-Quran Cloud API
 // ==========================================
 
+/**
+ * Validate surah number is within valid range (1-114)
+ * @param {number} surahNumber - Surah number to validate
+ * @returns {boolean} - True if valid, false otherwise
+ */
+function validateSurahNumber(surahNumber) {
+    const num = parseInt(surahNumber, 10);
+    if (isNaN(num) || num < 1 || num > 114) {
+        console.error(`[Surah] Invalid surah number: ${surahNumber} (must be 1-114)`);
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Fetch surah data from Al-Quran Cloud API with proper error handling
+ * @param {number} surahNumber - Surah number (1-114)
+ * @param {string} edition - Edition to fetch (default: 'quran-uthmani')
+ * @returns {Promise<object>} - Surah data object
+ * @throws {Error} - If surah number is invalid or API fails
+ */
+async function fetchSurah(surahNumber, edition = 'quran-uthmani') {
+    // Validate surah number FIRST
+    if (!validateSurahNumber(surahNumber)) {
+        throw new Error(`Invalid surah number: ${surahNumber}. Must be between 1 and 114.`);
+    }
+    
+    const num = parseInt(surahNumber, 10);
+    const apiUrl = `${QURAN_API_BASE}/surah/${num}/${edition}`;
+    
+    console.log(`[Surah] Fetching surah ${num} from: ${apiUrl}`);
+    
+    try {
+        const response = await fetch(apiUrl);
+        
+        // Log response status
+        console.log(`[Surah] Response status: ${response.status} ${response.statusText}`);
+        
+        // Check for HTTP errors
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        // Check content type
+        const contentType = response.headers.get('content-type');
+        if (contentType && !contentType.includes('application/json')) {
+            throw new Error(`Unexpected content type: ${contentType}`);
+        }
+        
+        const data = await response.json();
+        
+        // Log API response status
+        console.log(`[Surah] API status: ${data.status}, code: ${data.code}`);
+        
+        // Check for API-level errors
+        if (data.status === 'offline' || data.error) {
+            throw new Error(data.message || data.error || 'API returned offline/error status');
+        }
+        
+        // Validate response structure
+        if (data.code !== 200) {
+            throw new Error(`API returned code ${data.code}, expected 200`);
+        }
+        
+        if (!data.data) {
+            throw new Error('API response missing data field');
+        }
+        
+        if (!data.data.ayahs || !Array.isArray(data.data.ayahs)) {
+            throw new Error('API response missing valid ayahs array');
+        }
+        
+        console.log(`[Surah] Successfully fetched surah ${num}: ${data.data.name} (${data.data.ayahs.length} ayahs)`);
+        return data.data;
+        
+    } catch (error) {
+        // Log detailed error information
+        console.error(`[Surah] Failed to fetch surah ${num}:`, {
+            error: error.message,
+            url: apiUrl,
+            surahNumber: num,
+            timestamp: new Date().toISOString()
+        });
+        throw error;
+    }
+}
+
 async function initQuran() {
     await loadSurahsList();
     setupQuranEventListeners();
@@ -312,8 +413,12 @@ function setupQuranEventListeners() {
     // Surah dropdown change
     safeAddEventListener('surahSelect', 'change', function(e) {
         const surahNumber = parseInt(e.target.value);
-        if (surahNumber) {
+        if (surahNumber && validateSurahNumber(surahNumber)) {
+            console.log(`[Surah] User selected surah: ${surahNumber}`);
             loadSurah(surahNumber);
+        } else if (surahNumber) {
+            console.error(`[Surah] Invalid surah number selected: ${surahNumber}`);
+            showError('رقم السورة غير صالح. يرجى اختيار سورة من القائمة.');
         }
     });
     
@@ -338,8 +443,12 @@ function setupQuranEventListeners() {
     
     // Retry button
     safeAddEventListener('retryBtn', 'click', function() {
-        if (appState.selectedSurah) {
+        if (appState.selectedSurah && validateSurahNumber(appState.selectedSurah)) {
+            console.log(`[Surah] Retrying load for surah: ${appState.selectedSurah}`);
             loadSurah(appState.selectedSurah);
+        } else {
+            console.error(`[Surah] Cannot retry - invalid selectedSurah: ${appState.selectedSurah}`);
+            showError('يرجى اختيار سورة صالحة من القائمة.');
         }
     });
     
@@ -376,9 +485,11 @@ function setupQuranEventListeners() {
         } else {
             // Get current selected surah
             const surahNum = appState.selectedSurah;
-            if (surahNum) {
+            if (surahNum && validateSurahNumber(surahNum)) {
+                console.log(`[Audio] Playing surah: ${surahNum}`);
                 playSurahAudio(surahNum);
             } else {
+                console.warn(`[Audio] Cannot play - invalid surah: ${surahNum}`);
                 showToast('يرجى اختيار سورة أولاً');
             }
         }
@@ -558,7 +669,14 @@ function filterSurahs(query) {
 }
 
 async function loadSurah(surahNumber) {
-    appState.selectedSurah = surahNumber;
+    // Validate surah number first
+    if (!validateSurahNumber(surahNumber)) {
+        showError('رقم السورة غير صالح. يرجى اختيار سورة من القائمة.');
+        return;
+    }
+    
+    const num = parseInt(surahNumber, 10);
+    appState.selectedSurah = num;
     
     // Stop any currently playing audio when loading new surah
     if (audioState.isPlaying) {
@@ -569,47 +687,25 @@ async function loadSurah(surahNumber) {
     hideAllStates();
     safeSetDisplay('loadingState', 'block');
     
-    const apiUrl = `${QURAN_API_BASE}/surah/${surahNumber}/quran-uthmani`;
-    
     try {
-        const response = await fetch(apiUrl);
+        // Use the new fetchSurah helper with proper validation and error handling
+        const surahData = await fetchSurah(num);
         
-        // Check if response is our offline JSON
-        const contentType = response.headers.get('content-type');
-        const isOfflineResponse = contentType && contentType.includes('application/json');
+        // Store and display the surah
+        appState.currentSurahData = surahData;
+        displaySurah(surahData);
         
-        if (isOfflineResponse) {
-            // Check if it's an error/offline response
-            const data = await response.json();
-            if (data.status === 'offline' || data.error) {
-                // Try to load from SW cache directly
-                const cachedData = await loadSurahFromCache(surahNumber);
-                if (cachedData) {
-                    displaySurah(cachedData);
-                    showToast('تم تحميل السورة من الذاكرة المؤقتة');
-                } else {
-                    throw new Error(data.message || 'تعذر تحميل السورة');
-                }
-                return;
-            }
-        }
+        // Cache for offline use
+        cacheSurahInSW(num);
         
-        const data = await response.json();
+        console.log(`[Surah] Successfully loaded surah ${num}: ${surahData.name}`);
         
-        if (data.code === 200 && data.data) {
-            appState.currentSurahData = data.data;
-            displaySurah(data.data);
-            
-            // Cache for offline use
-            cacheSurahInSW(surahNumber);
-        } else {
-            throw new Error('Invalid response');
-        }
     } catch (error) {
-        console.error('Error loading surah:', error);
+        // Error already logged in fetchSurah, just handle UI recovery
+        console.error(`[Surah] loadSurah failed for surah ${num}:`, error.message);
         
         // Try to load from SW cache on any error
-        const cachedData = await loadSurahFromCache(surahNumber);
+        const cachedData = await loadSurahFromCache(num);
         if (cachedData) {
             displaySurah(cachedData);
             showToast('تم تحميل السورة من الذاكرة المؤقتة');
@@ -631,13 +727,23 @@ function cacheSurahInSW(surahNumber) {
 
 // Load surah directly from service worker cache
 async function loadSurahFromCache(surahNumber) {
+    // Validate surah number
+    if (!validateSurahNumber(surahNumber)) {
+        console.warn(`[Surah] Invalid surah number for cache load: ${surahNumber}`);
+        return null;
+    }
+    
     if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
+        console.log(`[Surah] Service worker not available for cache load`);
         return null;
     }
     
     try {
         const sw = navigator.serviceWorker.controller;
-        const apiUrl = `${QURAN_API_BASE}/surah/${surahNumber}/quran-uthmani`;
+        const num = parseInt(surahNumber, 10);
+        const apiUrl = `${QURAN_API_BASE}/surah/${num}/quran-uthmani`;
+        
+        console.log(`[Surah] Attempting to load surah ${num} from cache...`);
         
         // Try to get from SW via message
         // For now, we'll try fetching directly which will hit SW cache
@@ -647,12 +753,17 @@ async function loadSurahFromCache(surahNumber) {
             if (contentType && contentType.includes('application/json')) {
                 const data = await response.json();
                 if (data.code === 200 && data.data) {
+                    console.log(`[Surah] Successfully loaded surah ${num} from cache`);
                     return data.data;
                 }
             }
         }
     } catch (error) {
-        console.log('Could not load from cache:', error);
+        console.error(`[Surah] Could not load from cache:`, {
+            error: error.message,
+            surahNumber: surahNumber,
+            timestamp: new Date().toISOString()
+        });
     }
     return null;
 }
@@ -1234,22 +1345,118 @@ function extractAyahFromClick(event) {
 }
 
 /**
- * Fetch Tafsir for a specific ayah
- * Uses API: https://api.alquran.cloud/v1/ayah/${globalAyahIndex}/${editionId}
- * @param {string} editionId - Edition ID (ar.muyassar, ar.ibn-kathir, ar.jalalayn, ar.saadi)
+ * Validate inputs for tafsir fetch
+ * @param {string} editionId - Edition ID to validate
+ * @param {number} surahNumber - Surah number to validate (1-114)
+ * @param {number} ayahNumberInSurah - Ayah number within surah to validate
+ * @returns {object} - { valid: boolean, error?: string }
+ */
+function validateTafsirInputs(editionId, surahNumber, ayahNumberInSurah) {
+    // Validate edition ID - valid IDs (Ibn Kathir from quranapi, others from alquran.cloud)
+    const validEditionIds = ['ar.ibn-kathir', 'ar.baghawi', 'ar.muyassar'];
+    if (!editionId || !validEditionIds.includes(editionId)) {
+        return { valid: false, error: `Invalid edition ID: ${editionId}. Must be one of: ${validEditionIds.join(', ')}` };
+    }
+    
+    // Validate surah number
+    const surahNum = parseInt(surahNumber, 10);
+    if (isNaN(surahNum) || surahNum < 1 || surahNum > 114) {
+        return { valid: false, error: `Invalid surah number: ${surahNumber}. Must be between 1 and 114.` };
+    }
+    
+    // Validate ayah number (1 to max ayahs for that surah)
+    const ayahNum = parseInt(ayahNumberInSurah, 10);
+    if (isNaN(ayahNum) || ayahNum < 1) {
+        return { valid: false, error: `Invalid ayah number: ${ayahNumberInSurah}. Must be 1 or greater.` };
+    }
+    
+    // Check against surah ayah count
+    const maxAyahs = SURAH_AYAH_COUNTS[surahNum - 1] || 0;
+    if (ayahNum > maxAyahs) {
+        return { valid: false, error: `Invalid ayah number: ${ayahNum}. Surah ${surahNum} only has ${maxAyahs} ayahs.` };
+    }
+    
+    return { valid: true };
+}
+
+/**
+ * Fetch FULL Tafsir text for a specific ayah
+ * 
+ * API Endpoint: https://api.alquran.cloud/v1/ayah/{globalAyahIndex}/{editionId}
+ * 
+ * Edition IDs for Full Text:
+ * - ar.muyassar: التفسير الميسر (Al-Muyassar)
+ * - ar.ibn-kathir: تفسير ابن كثير (Ibn Kathir - Full detailed version)
+ * - ar.saadi: تفسير السعدي (Al-Saadi - Taysir al-Karim al-Rahman)
+ * - ar.jalalayn: تفسير الجلالين (Al-Jalalyn - naturally concise)
+ * 
+ * @param {string} editionId - Edition ID
  * @param {number} surahNumber - Surah number (1-114)
  * @param {number} ayahNumberInSurah - Ayah number within the surah (1-indexed)
- * @returns {Promise<string>} Tafsir text
+ * @returns {Promise<string>} Full tafsir text (entire response from API)
+ */
+/**
+ * Fetch tafsir from appropriate API based on edition
+ * 
+ * Routing:
+ * - ar.ibn-kathir: quranapi.pages.dev (only API with Ibn Kathir)
+ * - ar.baghawi, ar.muyassar: alquran.cloud
+ * 
+ * @param {string} editionId - Edition ID
+ * @param {number} surahNumber - Surah number (1-114)
+ * @param {number} ayahNumberInSurah - Ayah number within the surah (1-indexed)
+ * @returns {Promise<string>} Full tafsir text
  */
 async function fetchTafsir(editionId, surahNumber, ayahNumberInSurah) {
-    // Calculate global ayah number (1-6236)
-    const globalAyahIndex = getGlobalAyahNumber(surahNumber, ayahNumberInSurah);
+    // Validate inputs first
+    const validation = validateTafsirInputs(editionId, surahNumber, ayahNumberInSurah);
+    if (!validation.valid) {
+        console.error(`[Tafsir] Validation failed:`, validation.error);
+        throw new Error(validation.error);
+    }
     
-    // API URL format: api.alquran.cloud/v1/ayah/{ayahIndex}/{editionId}
-    const apiUrl = `${TAFSIR_API_BASE}/ayah/${globalAyahIndex}/${editionId}`;
+    const surahNum = parseInt(surahNumber, 10);
+    const ayahNum = parseInt(ayahNumberInSurah, 10);
     
-    console.log(`[Tafsir] Fetching: ${apiUrl}`);
-    console.log(`[Tafsir] Global ayah: ${globalAyahIndex}, Edition: ${editionId}`);
+    // Determine which API to use based on edition
+    const apiRoute = TAFSIR_API_ROUTE[editionId] || 'alquran';
+    
+    console.log(`[Tafsir] Fetching tafsir:`);
+    console.log(`  - Edition: ${editionId}`);
+    console.log(`  - Surah: ${surahNum}, Ayah in surah: ${ayahNum}`);
+    console.log(`  - API Route: ${apiRoute}`);
+    
+    // Route to appropriate API
+    if (apiRoute === 'quranapi') {
+        return await fetchTafsirFromQuranAPI(surahNum, ayahNum, editionId);
+    } else {
+        return await fetchTafsirFromAlQuranCloud(surahNum, ayahNum, editionId);
+    }
+}
+
+/**
+ * Fetch tafsir from quranapi.pages.dev (for Ibn Kathir)
+ */
+/**
+ * Fetch Arabic tafsir from spa5k/tafsir_api CDN (for Ibn Kathir in Arabic)
+ * Endpoint: https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir/{slug}/{surah}/{ayah}.json
+ */
+async function fetchTafsirFromQuranAPI(surahNum, ayahNum, editionId) {
+    // Map editionId to CDN slug
+    const slugMap = {
+        'ar.ibn-kathir': 'ar-tafsir-ibn-kathir'
+    };
+    
+    const slug = slugMap[editionId];
+    if (!slug) {
+        throw new Error(`No Arabic CDN endpoint for edition: ${editionId}`);
+    }
+    
+    // Format: https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir/ar-tafsir-ibn-kathir/1/1.json
+    const apiUrl = `https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir/${slug}/${surahNum}/${ayahNum}.json`;
+    
+    console.log(`[Tafsir] Using Arabic tafsir CDN (spa5k/tafsir_api)`);
+    console.log(`  - API URL: ${apiUrl}`);
     
     try {
         const response = await fetch(apiUrl);
@@ -1260,8 +1467,72 @@ async function fetchTafsir(editionId, surahNumber, ayahNumberInSurah) {
         
         const data = await response.json();
         
+        // Response format: { "ayah": 1, "surah": 1, "text": "..." }
+        if (data.text) {
+            console.log(`[Tafsir] Success: Arabic Ibn Kathir tafsir retrieved`);
+            console.log(`[Tafsir] Length: ${data.text.length} characters`);
+            return data.text;
+        }
+        
+        throw new Error('Invalid response from Arabic tafsir CDN');
+    } catch (error) {
+        console.error(`[Tafsir] Error from Arabic tafsir CDN:`, error.message);
+        throw error;
+    }
+}
+
+/**
+ * Fetch tafsir from alquran.cloud (for Baghawi, Muyassar)
+ */
+async function fetchTafsirFromAlQuranCloud(surahNum, ayahNum, editionId) {
+    // Calculate global ayah number (1-6236) - This is critical for API!
+    const globalAyahIndex = getGlobalAyahNumber(surahNum, ayahNum);
+    
+    // Validate global ayah index is within valid range (1-6236)
+    if (globalAyahIndex < 1 || globalAyahIndex > 6236) {
+        throw new Error(`Invalid global ayah index: ${globalAyahIndex}. Must be between 1 and 6236.`);
+    }
+    
+    // API URL format: api.alquran.cloud/v1/ayah/{ayahIndex}/{editionId}
+    const apiUrl = `${TAFSIR_API_BASE}/ayah/${globalAyahIndex}/${editionId}`;
+    
+    console.log(`[Tafsir] Using alquran.cloud`);
+    console.log(`  - API URL: ${apiUrl}`);
+    console.log(`  - Global ayah index: ${globalAyahIndex} (1-6236)`);
+    
+    try {
+        const response = await fetch(apiUrl);
+        
+        // Log response details
+        console.log(`[Tafsir] Response status: ${response.status} ${response.statusText}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const contentType = response.headers.get('content-type');
+        if (contentType && !contentType.includes('application/json')) {
+            throw new Error(`Unexpected content type: ${contentType}`);
+        }
+        
+        const data = await response.json();
+        
+        // Log API response status
+        console.log(`[Tafsir] API status: ${data.status}, code: ${data.code}`);
+        
         if (data.data && data.data.text) {
-            console.log(`[Tafsir] Success: Surah ${surahNumber}, Ayah ${ayahNumberInSurah} (global: ${globalAyahIndex})`);
+            // CRITICAL: Verify the API returned the requested edition, not a fallback!
+            const returnedEdition = data.data.edition?.identifier;
+            if (returnedEdition && returnedEdition !== editionId) {
+                console.error(`[Tafsir] EDITION MISMATCH! Requested: ${editionId}, Got: ${returnedEdition}`);
+                console.error('[Tafsir] API returned fallback - likely invalid edition ID');
+                throw new Error(`Invalid edition: ${editionId} not available. API returned ${returnedEdition} instead.`);
+            }
+            
+            const textLength = data.data.text.length;
+            console.log(`[Tafsir] Success: Surah ${surahNum}, Ayah ${ayahNum} (global: ${globalAyahIndex})`);
+            console.log(`[Tafsir] Full text retrieved - Length: ${textLength} characters`);
+            console.log(`[Tafsir] Edition verified: ${editionId}`);
             return data.data.text;
         } else if (data.error) {
             throw new Error(`API Error: ${data.error}`);
@@ -1272,7 +1543,12 @@ async function fetchTafsir(editionId, surahNumber, ayahNumberInSurah) {
             throw new Error('Invalid tafsir response - no text field');
         }
     } catch (error) {
-        console.error(`[Tafsir] Error fetching for Surah ${surahNumber}, Ayah ${ayahNumberInSurah} (global: ${globalAyahIndex}):`, error);
+        console.error(`[Tafsir] Error fetching for Surah ${surahNum}, Ayah ${ayahNum} (global: ${globalAyahIndex}):`, {
+            error: error.message,
+            url: apiUrl,
+            editionId: editionId,
+            timestamp: new Date().toISOString()
+        });
         throw error;
     }
 }
@@ -1427,10 +1703,12 @@ function initTafsirModal() {
     // Modal tafsir select - change tafsir immediately
     if (modalTafsirSelect) {
         modalTafsirSelect.addEventListener('change', async function(e) {
-            const selectedTafsirId = e.target.value; // String ID (ar.muyassar, ar.ibn-kathir, etc.)
+            const selectedTafsirId = e.target.value; // String ID (ar.muyassar, ar.ibn-kathir, ar.saadi, ar.jalalayn)
             
-            // Update current tafsir - find by string ID
-            currentTafsir = Object.values(TAFSIRS).find(t => t.id === selectedTafsirId) || TAFSIRS.AL_MUYASSAR;
+            // Update current tafsir - use lookup object for fast access
+            currentTafsir = TAFSIR_BY_ID[selectedTafsirId] || TAFSIRS.AL_MUYASSAR;
+            
+            console.log(`[Tafsir] Tafsir changed to: ${currentTafsir.name} (${currentTafsir.id})`);
             
             // Get current ayah
             const surah = currentModalAyah.surah;
